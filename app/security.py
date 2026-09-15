@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import HTTPException, Request, Response
 
-from .config import SECRET_KEY, SESSION_HOURS
+from .config import COOKIE_SECURE, SECRET_KEY, SESSION_HOURS
 from . import db
 
 COOKIE = "ps_session"
@@ -81,6 +81,7 @@ def set_session_cookie(response: Response, user_id: int):
         make_session(user_id),
         httponly=True,
         samesite="lax",
+        secure=COOKIE_SECURE,
         max_age=SESSION_HOURS * 3600,
         path="/",
     )

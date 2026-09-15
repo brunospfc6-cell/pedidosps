@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS sales_orders (
   seller_name TEXT NOT NULL,
   finance_contact_name TEXT,
   finance_contact TEXT,
+  contact_origin TEXT,
   payment_term_days INTEGER,
   calculation_memo TEXT,
   credit_used REAL NOT NULL DEFAULT 0,
@@ -149,9 +150,26 @@ CREATE TABLE IF NOT EXISTS hubgov_ledger (
   kind TEXT NOT NULL CHECK (kind IN ('generated', 'used')),
   amount REAL NOT NULL,
   nf_number TEXT,
+  notes TEXT,
   created_by INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 INSERT OR IGNORE INTO document_counters (name, last_value) VALUES ('odc', 0);
 INSERT OR IGNORE INTO document_counters (name, last_value) VALUES ('pv', 0);
+
+CREATE TABLE IF NOT EXISTS catalog_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS price_list_imports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename TEXT NOT NULL,
+  label TEXT,
+  sku_count INTEGER NOT NULL,
+  imported_by INTEGER,
+  imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+  notes TEXT
+);
+

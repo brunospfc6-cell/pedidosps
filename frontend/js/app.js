@@ -28,6 +28,24 @@ function dateBR(iso) {
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
+const CONTACT_ORIGINS = [
+  "Fale Conosco (site)",
+  "Contato(e-mail)",
+  "Lig. Cliente",
+  "Evento Físico",
+  "Indic. Clientes",
+  "Indic. Parceiros",
+  "LC",
+  "Mailing RD MKT",
+  "Linkedln",
+  "Google Ads",
+  "Instagram",
+  "Facebook",
+  "TLMKT",
+  "Visitas",
+  "Webinar",
+  "Grupo WhastsAPP",
+];
 function esc(s) {
   return String(s ?? "")
     .replace(/&/g, "&" + "amp;")
@@ -38,11 +56,13 @@ function esc(s) {
 }
 
 async function api(path, opts = {}) {
+  const isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
+  const headers = isForm ? { ...(opts.headers || {}) } : { "Content-Type": "application/json", ...(opts.headers || {}) };
   const res = await fetch(path, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+    headers,
     ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    body: opts.body ? (isForm ? opts.body : JSON.stringify(opts.body)) : undefined,
   });
   if (res.status === 401) {
     me = null;
@@ -51,7 +71,11 @@ async function api(path, opts = {}) {
   }
   const ct = res.headers.get("content-type") || "";
   const data = ct.includes("json") ? await res.json() : await res.blob();
-  if (!res.ok) throw new Error(data.detail || "Erro na requisição");
+  if (!res.ok) {
+    const detail = data && data.detail;
+    const msg = typeof detail === "string" ? detail : detail?.[0]?.msg || "Erro na requisição";
+    throw new Error(msg);
+  }
   return data;
 }
 
@@ -78,7 +102,7 @@ function nav() {
     ["#/creditos", "HubGov"],
   ];
   if (me.role === "administrador") {
-    items.push(["#/produtos", "Produtos e Preços"], ["#/usuarios", "Usuários"]);
+    items.push(["#/produtos", "Produtos e Preços"], ["#/atualizacoes", "Atualizações"], ["#/usuarios", "Usuários"]);
   }
   if (me.role === "administrador" || me.role === "diretor") items.push(["#/gestao", "Gestão e Análise"]);
   const hash = location.hash || "#/";
@@ -107,6 +131,7 @@ function shell(html) {
         </div>
         <div class="row-actions">
           <span class="badge">${esc(me.role_label)}</span>
+          ${me.role === "administrador" ? `<a class="btn outline sm" href="#/atualizacoes">Atualizar Sistema</a>` : ""}
           <button class="btn ghost sm" id="logout">Sair</button>
         </div>
       </header>
@@ -144,6 +169,7 @@ async function route() {
     if (hash === "#/clientes") return renderClients();
     if (hash === "#/creditos") return renderCredits();
     if (hash === "#/produtos") return renderProducts();
+    if (hash === "#/atualizacoes") return renderUpdates();
     if (hash === "#/usuarios") return renderUsers();
     if (hash === "#/gestao") return renderGestao();
     app.innerHTML = shell("<p>Página não encontrada.</p>");
@@ -614,13 +640,14 @@ function itemRow(it = {}, i) {
 async function renderSalesList() {
   const rows = await api("/api/vendas");
   const body = rows.length
-    ? `<table class="data"><thead><tr><th>Número</th><th>ODC</th><th>Cliente</th><th>Tipo</th><th>Data</th><th>Status</th><th class="num">Total</th></tr></thead><tbody>
+    ? `<table class="data"><thead><tr><th>Número</th><th>ODC</th><th>Cliente</th><th>Origem</th><th>Tipo</th><th>Data</th><th>Status</th><th class="num">Total</th></tr></thead><tbody>
       ${rows
         .map(
           (o) => `<tr>
           <td class="mono"><a href="#/vendas/${o.id}">${esc(o.number)}</a></td>
           <td class="mono">${esc(o.purchase_order_number)}</td>
           <td>${esc(o.client_name)}</td>
+          <td>${esc(o.contact_origin || "—")}</td>
           <td>${o.client_type === "governo" ? "Governo" : "Privado"}</td>
           <td>${dateBR(o.order_date)}</td>
           <td>${badge(o.status)}</td>
@@ -685,6 +712,12 @@ async function renderSalesForm(unused, id) {
           <option value="privado" ${odc.client_type === "privado" ? "selected" : ""}>Privado</option>
         </select></div>
         <div class="field"><label>Data</label><input type="date" name="order_date" value="${esc(existing?.order_date || today())}"></div>
+        <div class="field"><label>Origem do Contato</label>
+          <select name="contact_origin" required>
+            <option value="">Selecione</option>
+            ${CONTACT_ORIGINS.map((o) => `<option value="${esc(o)}" ${existing?.contact_origin === o ? "selected" : ""}>${esc(o)}</option>`).join("")}
+          </select>
+        </div>
         <div class="field" id="govf"><label>Nº do Contrato Administrativo</label><input name="contract_number" value="${esc(existing?.contract_number || "")}"></div>
         <div class="field" id="privf"><label>Nº da Proposta</label><input name="proposal_number" value="${esc(existing?.proposal_number || "")}"></div>
         <div class="field" id="aceite"><label>Data do Aceite</label><input type="date" name="acceptance_date" value="${esc(existing?.acceptance_date || "")}"></div>
@@ -741,11 +774,16 @@ async function renderSalesForm(unused, id) {
   });
   $("#save")?.addEventListener("click", async () => {
     try {
+      if (!form.contact_origin.value) {
+        toast("Informe a origem do contato.", true);
+        return;
+      }
       const body = {
         id: existing?.id,
         purchase_order_id: odc.id,
         order_date: form.order_date.value,
         client_type: form.client_type.value,
+        contact_origin: form.contact_origin.value,
         contract_number: form.contract_number.value,
         proposal_number: form.proposal_number.value,
         acceptance_date: form.acceptance_date.value,
@@ -825,7 +863,7 @@ async function renderClients() {
 
 async function renderCredits() {
   const d = await api("/api/credits");
-  app.innerHTML = shell(`${head("Créditos HubGov", "Pedidos de governo geram crédito a partir de 8% sobre o valor de lista.")}
+  app.innerHTML = shell(`${head("Créditos HubGov", "Inclui o saldo de R$ 194.372,95 existente antes do sistema. Pedidos de governo geram crédito a partir de 8% sobre o valor de lista.")}
     <div class="grid g3" style="margin-bottom:16px">
       <div class="card stat"><small>Gerado</small><strong>${brl(d.summary.generated)}</strong></div>
       <div class="card stat"><small>Utilizado</small><strong>${brl(d.summary.used)}</strong></div>
@@ -834,10 +872,14 @@ async function renderCredits() {
     <div class="card"><div class="bd" style="padding:0">
       <table class="data"><thead><tr><th>Data</th><th>Tipo</th><th>NF</th><th>Cliente</th><th class="num">Valor</th></tr></thead>
       <tbody>${(d.ledger || [])
-        .map(
-          (r) => `<tr><td>${dateBR(r.created_at)}</td><td>${r.kind === "generated" ? "Gerado" : "Utilizado"}</td>
-          <td class="mono">${esc(r.nf_number || "—")}</td><td>${esc(r.client_name || "—")}</td><td class="num">${brl(r.amount)}</td></tr>`,
-        )
+        .map((r) => {
+          const inicial = !r.purchase_order_id && r.kind === "generated";
+          return `<tr><td>${dateBR(r.created_at)}</td>
+          <td>${inicial ? "Saldo inicial" : r.kind === "generated" ? "Gerado" : "Utilizado"}</td>
+          <td class="mono">${esc(r.nf_number || "—")}</td>
+          <td>${esc(r.notes || r.client_name || "—")}</td>
+          <td class="num">${brl(r.amount)}</td></tr>`;
+        })
         .join("")}</tbody></table>
     </div></div>`);
   bindShell();
@@ -845,8 +887,15 @@ async function renderCredits() {
 
 async function renderProducts() {
   if (me.role !== "administrador") return (app.innerHTML = shell("<p>Acesso restrito.</p>"));
+  const cat = await api("/api/catalog");
   const rows = await api("/api/products/all");
-  app.innerHTML = shell(`${head("Produtos e Preços", "Planilha Autodesk Setembro 2026 — preço reseller USD + IVA.")}
+  const meta = cat.meta || {};
+  app.innerHTML = shell(`
+    ${head(
+      "Produtos e Preços",
+      `${esc(meta.label || "Tabela Autodesk")}${meta.effective ? " · Vigência " + esc(meta.effective) : ""}. Pedidos já emitidos mantêm o preço gravado.`,
+      `<a class="btn outline" href="#/atualizacoes">Atualizar Tabela</a>`,
+    )}
     <div class="card" style="margin-bottom:14px"><div class="bd"><input id="pqall" placeholder="Buscar SKU, produto, linha ou tipo…"></div></div>
     <div class="card"><div class="bd" style="padding:0;max-height:70vh;overflow:auto">
       <table class="data" id="ptable"><thead><tr><th>SKU</th><th>Produto</th><th>Prazo</th><th>Tipo</th><th class="num">Lista USD</th></tr></thead>
@@ -856,7 +905,7 @@ async function renderProducts() {
         )
         .join("")}</tbody></table>
     </div></div>
-    <p class="muted" id="pcnt">${rows.length} SKUs na tabela vigente.</p>`);
+    <p class="muted" id="pcnt">${rows.length} SKUs ativos na tabela vigente.</p>`);
   bindShell();
   $("#pqall").oninput = () => {
     const q = $("#pqall").value.trim().toLowerCase();
@@ -867,6 +916,117 @@ async function renderProducts() {
       if (show) n++;
     });
     $("#pcnt").textContent = n + " SKUs na tabela vigente.";
+  };
+}
+
+async function renderUpdates() {
+  if (me.role !== "administrador") return (app.innerHTML = shell("<p>Acesso restrito ao administrador.</p>"));
+  let info = {};
+  try {
+    info = await api("/api/system/update");
+  } catch (e) {
+    info = { error: e.message, catalog: {}, repo: "", branch: "main" };
+  }
+  const cat = info.catalog || {};
+  const imports = (await api("/api/catalog")).imports || [];
+  const hist = imports.length
+    ? imports
+        .map(
+          (r) =>
+            `<tr><td>${dateBR(r.imported_at)}</td><td>${esc(r.filename)}</td><td>${esc(r.label || "—")}</td><td>${r.sku_count}</td><td>${esc(r.imported_by_name || "—")}</td></tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="5" class="empty">Nenhuma substituição ainda. A tabela atual veio da instalação.</td></tr>`;
+
+  app.innerHTML = shell(`
+    ${head("Atualizações", "O administrador publica uma nova versão do sistema pelo GitHub e substitui a tabela de preços Autodesk.")}
+    <div class="card" style="margin-bottom:16px">
+      <div class="hd"><h3>1. Atualizar o Sistema (GitHub)</h3></div>
+      <div class="bd">
+        <p class="muted">Baixa o código publicado no repositório e substitui os arquivos do aplicativo. O banco de dados, as senhas e o .env não são alterados.</p>
+        <div class="grid g2" style="margin:14px 0">
+          <div class="field"><label>Repositório (usuario/projeto)</label><input id="grepo" value="${esc(info.repo || "")}" placeholder="brunospfc6-cell/pedidosps"></div>
+          <div class="field"><label>Branch</label><input id="gbranch" value="${esc(info.branch || "main")}"></div>
+          <div class="field"><label>Token GitHub (só se o repositório for privado)</label><input id="gtoken" type="password" placeholder="${info.has_token ? "Token já gravado — deixe em branco para manter" : "ghp_…"}"></div>
+          <div class="field" style="align-self:end"><button class="btn outline" id="gsave">Salvar Repositório</button></div>
+        </div>
+        <div class="banner" id="gstatus">
+          <div>${
+            info.ok
+              ? `<strong>${esc(info.repo)}</strong><p class="muted">${info.up_to_date ? "Já está na versão mais recente." : "Há uma versão no GitHub."}<br>${esc(info.sha || "")} · ${esc(info.message || "")}<br>${esc(info.date || "")}</p>`
+              : `<strong>GitHub</strong><p class="muted">${esc(info.error || "Informe o repositório e, se for privado, o token.")}</p>`
+          }</div>
+        </div>
+        <div class="row-actions" style="margin-top:12px">
+          <button class="btn primary" id="gupd">Atualizar Sistema</button>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="hd"><h3>2. Substituir Tabela de Preços</h3></div>
+      <div class="bd">
+        <p class="muted">Envie a planilha Autodesk (.xlsx), aba Price List. A lista anterior é desativada; os pedidos já emitidos não mudam.</p>
+        <p style="margin:10px 0"><strong>${esc(cat.label || "Tabela vigente")}</strong><br>
+        <span class="muted">${cat.active || 0} SKUs ativos${cat.effective ? " · " + esc(cat.effective) : ""}${cat.file ? " · " + esc(cat.file) : ""}</span></p>
+        <div class="row-actions" style="align-items:center">
+          <input type="file" id="xlsx" accept=".xlsx,.xlsm,.json">
+          <button class="btn primary" id="imp">Substituir Tabela de Preços</button>
+        </div>
+      </div>
+    </div>
+    <div class="card"><div class="hd"><h3>Histórico de Tabelas</h3></div>
+      <div class="bd" style="padding:0">
+        <table class="data"><thead><tr><th>Data</th><th>Arquivo</th><th>Nome</th><th>SKUs</th><th>Quem</th></tr></thead>
+        <tbody>${hist}</tbody></table>
+      </div>
+    </div>
+  `);
+  bindShell();
+  $("#gsave").onclick = async () => {
+    try {
+      await api("/api/system/github", {
+        method: "POST",
+        body: { repo: $("#grepo").value, branch: $("#gbranch").value, token: $("#gtoken").value || undefined },
+      });
+      toast("Repositório salvo.");
+      route();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  $("#gupd").onclick = async () => {
+    if (!confirm("Atualizar o sistema com o código publicado no GitHub? O banco de pedidos não será apagado.")) return;
+    const btn = $("#gupd");
+    btn.disabled = true;
+    btn.textContent = "Atualizando…";
+    try {
+      const r = await api("/api/system/update", { method: "POST", body: {} });
+      toast("Sistema atualizado" + (r.sha ? " (" + r.sha + ")" : "") + ". Recarregue a página.");
+      setTimeout(() => location.reload(), 800);
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+      btn.textContent = "Atualizar Sistema";
+    }
+  };
+  $("#imp").onclick = async () => {
+    const f = $("#xlsx").files[0];
+    if (!f) return toast("Escolha a planilha Autodesk (.xlsx).", true);
+    if (!confirm("Substituir a tabela de preços atual por " + f.name + "? Pedidos já emitidos mantêm os valores gravados.")) return;
+    const fd = new FormData();
+    fd.append("file", f);
+    const btn = $("#imp");
+    btn.disabled = true;
+    btn.textContent = "Importando…";
+    try {
+      const r = await api("/api/products/import", { method: "POST", body: fd });
+      toast("Tabela substituída: " + (r.imported || r.active) + " SKUs.");
+      route();
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+      btn.textContent = "Substituir Tabela de Preços";
+    }
   };
 }
 

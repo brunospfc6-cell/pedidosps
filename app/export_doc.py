@@ -61,12 +61,7 @@ def _header(title: str, subtitle: str) -> str:
     return f"""
     <table class="doc-head" width="100%">
       <tr>
-        <td width="240" valign="middle">{img}</td>
-        <td valign="middle">
-          <p><strong>{_esc(COMPANY['name'])}</strong></p>
-          <p class="muted">{_esc(COMPANY['tagline'])}</p>
-          <p class="muted">{_esc(COMPANY['addressLine1'])} · {_esc(COMPANY['phone'])}</p>
-        </td>
+        <td valign="middle" style="padding-bottom:12pt">{img}</td>
       </tr>
     </table>
     <h1>{_esc(title)}</h1>
@@ -160,6 +155,7 @@ def sales_html(order: dict, items: list[dict]) -> str:
         if order.get("client_type") == "governo"
         else f"<p>Proposta: {_esc(order.get('proposal_number') or '—')} · Aceite: {_date(order.get('acceptance_date'))}</p>"
     )
+    origin = order.get("contact_origin") or "—"
     return f"""
     <div>
       {_header(f"Pedido de Venda {order['number']}", f"Data {_date(order['order_date'])} · ODC {_esc(order.get('purchase_order_number') or '')}")}
@@ -167,6 +163,7 @@ def sales_html(order: dict, items: list[dict]) -> str:
       <div class="box">
         <p>{_esc(order.get('client_name'))} · CSN {_esc(order.get('client_csn'))}</p>
         <p>Tipo: {"Governo" if order.get("client_type") == "governo" else "Privado"}</p>
+        <p>Origem do Contato: {_esc(origin)}</p>
         {extra}
       </div>
       <h2>Memória de Cálculo (ODC)</h2>

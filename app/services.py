@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from . import db
 from .calc import build_memo, compute_odc
-from .config import DEFAULT_HUBGOV_PCT, MIN_NET_BRL
+from .config import CONTACT_ORIGINS, DEFAULT_HUBGOV_PCT, MIN_NET_BRL
 
 
 def pad(n: int, width: int = 6) -> str:
@@ -252,6 +252,9 @@ def save_sales(conn, user: dict, data: dict) -> dict:
         raise HTTPException(400, "Informe o número do contrato administrativo.")
     if data.get("client_type") == "privado" and not (data.get("proposal_number") or "").strip():
         raise HTTPException(400, "Informe o número da proposta.")
+    origin = (data.get("contact_origin") or "").strip()
+    if origin not in CONTACT_ORIGINS:
+        raise HTTPException(400, "Informe a origem do contato.")
     sale_total = sum(float(it["qty"]) * float(it["unit_price_brl"]) for it in items)
     memo = data.get("calculation_memo") or build_memo(
         compute_odc(
@@ -270,13 +273,13 @@ def save_sales(conn, user: dict, data: dict) -> dict:
         conn.execute(
             """UPDATE sales_orders SET order_date=?, client_type=?, contract_number=?, proposal_number=?,
                acceptance_date=?, margin_pct=?, seller_name=?, finance_contact_name=?, finance_contact=?,
-               payment_term_days=?, calculation_memo=?, credit_used=?, credit_generated=?, sale_total_brl=?,
-               updated_at=datetime('now') WHERE id=?""",
+               contact_origin=?, payment_term_days=?, calculation_memo=?, credit_used=?, credit_generated=?,
+               sale_total_brl=?, updated_at=datetime('now') WHERE id=?""",
             (
                 data["order_date"], data["client_type"], data.get("contract_number"), data.get("proposal_number"),
                 data.get("acceptance_date"), data.get("margin_pct") or 0, data.get("seller_name") or user["name"],
-                data.get("finance_contact_name"), data.get("finance_contact"), data.get("payment_term_days"),
-                memo, po["credit_used"], po["credit_generated"], sale_total, so_id,
+                data.get("finance_contact_name"), data.get("finance_contact"), origin,
+                data.get("payment_term_days"), memo, po["credit_used"], po["credit_generated"], sale_total, so_id,
             ),
         )
         conn.execute("DELETE FROM sales_order_items WHERE sales_order_id = ?", (so_id,))
@@ -286,13 +289,14 @@ def save_sales(conn, user: dict, data: dict) -> dict:
             """INSERT INTO sales_orders (
                  number, seq, purchase_order_id, order_date, client_type, contract_number, proposal_number,
                  acceptance_date, margin_pct, seller_id, seller_name, finance_contact_name, finance_contact,
-                 payment_term_days, calculation_memo, credit_used, credit_generated, sale_total_brl, created_by
-               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                 contact_origin, payment_term_days, calculation_memo, credit_used, credit_generated,
+                 sale_total_brl, created_by
+               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 number, seq, po["id"], data["order_date"], data["client_type"], data.get("contract_number"),
                 data.get("proposal_number"), data.get("acceptance_date"), data.get("margin_pct") or 0,
                 user["id"], data.get("seller_name") or user["name"], data.get("finance_contact_name"),
-                data.get("finance_contact"), data.get("payment_term_days"), memo, po["credit_used"],
+                data.get("finance_contact"), origin, data.get("payment_term_days"), memo, po["credit_used"],
                 po["credit_generated"], sale_total, user["id"],
             ),
         )

@@ -1,0 +1,20 @@
+PRO-SYSTEMS — O ATALHO CERTO
+
+O atalho deve abrir o NAVEGADOR na tela Entrar:
+    http://192.168.0.10/
+
+NAO use:
+    Gerenciador dos Servicos de Informacoes da Internet (IIS)
+    (icone de globo com engrenagem — isso e o console do servidor)
+    Servicos (services.msc)
+    a pagina azul "IIS Windows Server"
+
+NO SERVIDOR, agora:
+    1. Clique com o direito em corrigir-atalho.bat
+    2. Executar como administrador
+    3. Apague o atalho antigo do IIS
+    4. Use o icone "Pro-Systems" na area de trabalho
+
+PARA A EQUIPE (pasta compartilhada):
+    copie Abrir-Pro-Systems.bat  ou  Atalho-Pro-Systems.url
+    exemplo: \\192.168.0.10\Publico\Pro-Systems.url

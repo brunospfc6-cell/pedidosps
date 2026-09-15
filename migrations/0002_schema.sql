@@ -123,6 +123,7 @@ create table if not exists sales_orders (
   seller_name text not null,
   finance_contact_name text,
   finance_contact text,
+  contact_origin text,
   payment_term_days integer,
   calculation_memo text,
   credit_used numeric(14,2) not null default 0,

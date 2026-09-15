@@ -4,17 +4,20 @@ import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response as FastResponse
 from fastapi.staticfiles import StaticFiles
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app import db
 from app.calc import compute_odc
 from app.config import HOST, PORT, ROLE_LABEL
 from app.export_doc import as_word, odc_html, sales_html
+from app.pricelist import get_meta as catalog_meta, list_imports, save_upload_and_apply
 from app.seed import seed_if_empty
 from app.security import clear_session, current_user, hash_password, set_session_cookie, verify_password
 from app import services
+from app import updater
 
 ROOT = Path(__file__).resolve().parent
 FRONTEND = ROOT / "frontend"
@@ -29,6 +32,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Pro-Systems Compras e Vendas", lifespan=lifespan)
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 
@@ -48,9 +52,20 @@ async def http_exc(_, exc: HTTPException):
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
 
+def require_admin(request: Request) -> dict:
+    u = current_user(request)
+    if u["role"] != "administrador":
+        raise HTTPException(403, "Somente o administrador.")
+    return u
+
+
 @app.get("/api/health")
 def health():
-    return {"ok": True, "app": "pro-systems"}
+    try:
+        meta = catalog_meta()
+    except Exception:
+        meta = {}
+    return {"ok": True, "app": "pro-systems", "catalog": meta.get("label") if isinstance(meta, dict) else None}
 
 
 # ── Auth ──────────────────────────────────────────────
@@ -202,6 +217,69 @@ def save_product(request: Request, payload: dict):
             )
             pid = cur.lastrowid
     return {"id": pid}
+
+
+@app.get("/api/catalog")
+def catalog(request: Request):
+    u = current_user(request)
+    meta = catalog_meta()
+    imports = list_imports() if u["role"] == "administrador" else []
+    return {"meta": meta, "imports": imports}
+
+
+@app.post("/api/products/import")
+async def import_price_list(request: Request, file: UploadFile = File(...)):
+    u = require_admin(request)
+    raw = await file.read()
+    if len(raw) > 20 * 1024 * 1024:
+        raise HTTPException(400, "Arquivo maior que 20 MB.")
+    if not raw:
+        raise HTTPException(400, "Arquivo vazio.")
+    try:
+        return save_upload_and_apply(file.filename or "tabela.xlsx", raw, u["id"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"Não foi possível ler a planilha: {e}")
+
+
+@app.get("/api/system/update")
+def system_update_info(request: Request):
+    require_admin(request)
+    cfg = updater._settings()
+    out = {
+        "repo": cfg["repo"],
+        "branch": cfg["branch"],
+        "has_token": bool(cfg["token"]),
+        "catalog": catalog_meta(),
+    }
+    try:
+        out.update(updater.remote_info())
+        out["ok"] = True
+    except Exception as e:
+        out["ok"] = False
+        out["error"] = str(e)
+    return out
+
+
+@app.post("/api/system/github")
+def save_github(request: Request, payload: dict):
+    require_admin(request)
+    updater.save_github_settings(
+        payload.get("repo") or "",
+        payload.get("branch") or "main",
+        payload.get("token"),
+    )
+    return {"ok": True}
+
+
+@app.post("/api/system/update")
+def system_update(request: Request):
+    require_admin(request)
+    try:
+        return updater.apply_github_update()
+    except Exception as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/api/clients")
@@ -488,7 +566,7 @@ def export_csv(request: Request, kind: str = "odc"):
         rows = db.rows(
             conn.execute(
                 """SELECT so.number, so.order_date, so.status, so.client_type, po.number AS odc,
-                          po.client_name, so.sale_total_brl, so.margin_pct, so.seller_name
+                          po.client_name, so.contact_origin, so.sale_total_brl, so.margin_pct, so.seller_name
                    FROM sales_orders so JOIN purchase_orders po ON po.id=so.purchase_order_id ORDER BY so.seq"""
             )
         )

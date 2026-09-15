@@ -1,0 +1,22 @@
+Servidor: Windows Server 2019   IP: 192.168.0.10
+Acesso dos usuarios: http://192.168.0.10/
+
+[ ] App em C:\Apps\Pro-Systems (disco LOCAL, nao pasta compartilhada)
+[ ] Python 3.10+ com PATH
+[ ] venv + pip install -r requirements.txt
+[ ] .env com PUBLIC_URL=http://192.168.0.10 e COOKIE_SECURE=0
+[ ] Teste no servidor: http://127.0.0.1:8000 (tela Entrar)
+[ ] Servico Windows ProSystemsApp (NSSM) Automatico
+[ ] IIS instalado
+[ ] URL Rewrite 2.1 + ARR 3.0 instalados
+[ ] ARR: Enable proxy
+[ ] Default Web Site PARADO, sem binding na porta 80, sem inicio automatico
+[ ] Site IIS "Pro-Systems" em *:80, path = C:\Apps\Pro-Systems\frontend
+[ ] Host name VAZIO
+[ ] frontend\web.config presente
+[ ] Firewall porta 80 (Domain/Private); porta 8000 fechada para a rede
+[ ] De um PC da rede: http://192.168.0.10/ abre o login (nao a tela azul do IIS)
+[ ] Atalho "Pro-Systems" na area de trabalho (nao o Gerenciador do IIS)
+[ ] Atalho \\192.168.0.10\Publico\Pro-Systems.url (opcional)
+[ ] Senhas de teste trocadas
+[ ] Backup diario de C:\Apps\Pro-Systems\data\

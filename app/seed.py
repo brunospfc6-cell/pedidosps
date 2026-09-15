@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from .config import PARS, ROOT
+from .config import OPENING_HUBGOV_BRL, PARS, ROOT
 from . import db
 from .calc import compute_odc
 from .security import hash_password
@@ -61,6 +61,26 @@ def seed_if_empty():
                     if it.get("sku")
                 ],
             )
+
+    meta_n = conn.execute("SELECT COUNT(*) AS n FROM catalog_meta WHERE key='price_list_label'").fetchone()["n"]
+    if meta_n == 0:
+        price_path = ROOT / "seed" / "price-list.json"
+        label, version, effective = "Tabela Autodesk", "", ""
+        if price_path.exists():
+            data = json.loads(price_path.read_text(encoding="utf-8"))
+            label = data.get("label") or label
+            version = data.get("version") or ""
+            effective = " — ".join(x for x in [data.get("effectiveFrom"), data.get("effectiveTo")] if x)
+        nprod = conn.execute("SELECT COUNT(*) AS n FROM products WHERE active=1").fetchone()["n"]
+        for k, v in (
+            ("price_list_label", label),
+            ("price_list_version", version),
+            ("price_list_effective", effective),
+            ("price_list_count", str(nprod)),
+            ("github_repo", "brunospfc6-cell/pedidosps"),
+            ("github_branch", "main"),
+        ):
+            conn.execute("INSERT OR IGNORE INTO catalog_meta (key, value) VALUES (?, ?)", (k, v))
 
     clients = conn.execute("SELECT COUNT(*) AS n FROM clients").fetchone()["n"]
     if clients == 0:
@@ -172,4 +192,24 @@ def seed_if_empty():
                 (client["id"], odc_id, calc["credit_generated"], admin["id"]),
             )
 
+    seed_opening_hubgov(conn)
     conn.commit()
+
+
+def seed_opening_hubgov(conn):
+    already = conn.execute(
+        "SELECT value FROM catalog_meta WHERE key = 'hubgov_opening_seeded'"
+    ).fetchone()
+    if already:
+        return
+    admin = conn.execute("SELECT id FROM users WHERE role = 'administrador' LIMIT 1").fetchone()
+    uid = admin["id"] if admin else 1
+    conn.execute(
+        """INSERT INTO hubgov_ledger (kind, amount, notes, created_by)
+           VALUES ('generated', ?, 'Saldo inicial (antes do sistema)', ?)""",
+        (OPENING_HUBGOV_BRL, uid),
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO catalog_meta (key, value) VALUES ('hubgov_opening_seeded', '1')"
+    )
+

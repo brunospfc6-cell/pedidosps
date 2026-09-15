@@ -7,7 +7,7 @@ __pycache__/
 data/*.db
 data/*.db-wal
 data/*.db-shm
-data/*.db-journal
+data/uploads/
 .DS_Store
 node_modules/
 .vercel/

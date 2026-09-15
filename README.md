@@ -112,6 +112,7 @@ README.md
 app\
 frontend\
 seed\
+deploy-windows-server\
 ```
 
 2. **Não** inclua `.venv`, `data\app.db`, `node_modules`, `src` (resto antigo).
@@ -157,6 +158,24 @@ SECRET_KEY=altere-esta-chave-secreta-pro-systems
 O `start.bat` sobe em `127.0.0.1:8000` mesmo se você alterar a porta no `.env`. Para mudar a porta do duplo clique, edite o `start.bat`.
 
 Não use banco remoto. Este app é local de propósito.
+
+## Publicar no Windows Server 2019 (192.168.0.10)
+
+O file server da empresa publica o sistema **pelo IIS**, não pela pasta compartilhada.
+
+Os usuários abrem: **http://192.168.0.10/**
+
+Instalação no servidor:
+
+1. Extraia em `C:\Apps\Pro-Systems` (disco local — nunca `\\192.168.0.10\...`)
+2. Python + `venv` + `pip install -r requirements.txt`
+3. `copy deploy-windows-server\.env.producao.example .env`
+4. Serviço Windows: `deploy-windows-server\instalar-servico.bat` (precisa do [NSSM](https://nssm.cc/download))
+5. **IIS:** siga [deploy-windows-server/PASSO-IIS-2019.md](deploy-windows-server/PASSO-IIS-2019.md)
+
+Atalho para os usuários: `deploy-windows-server\Abrir-Pro-Systems.bat` (abre o navegador, **não** o Gerenciador do IIS).
+
+Se o atalho atual abre a tela do IIS: no servidor, clique com o direito em `deploy-windows-server\corrigir-atalho.bat` → **Executar como administrador**.
 
 ## Comando exato no Windows
 

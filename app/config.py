@@ -22,6 +22,11 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "pro-systems-local-altere-esta-chave")
 _db = Path(os.environ.get("DATABASE_PATH", "data/app.db"))
 DATABASE_PATH = _db if _db.is_absolute() else (ROOT / _db)
 SESSION_HOURS = int(os.environ.get("SESSION_HOURS", "12"))
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0").strip() in ("1", "true", "True", "yes")
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "brunospfc6-cell/pedidosps")
+GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 COMPANY = {
     "name": "Pro-Systems Informatica LTDA",
@@ -49,6 +54,8 @@ PARS = {
 
 MIN_NET_BRL = 20.0
 DEFAULT_HUBGOV_PCT = 8.0
+OPENING_HUBGOV_BRL = 194372.95
+
 
 SALE_KIND_LABEL = {
     "nova": "Novas Licenças",
@@ -61,6 +68,25 @@ STATUS_LABEL = {
     "cancelado": "Cancelado",
     "aberto": "Aberto",
 }
+CONTACT_ORIGINS = [
+    "Fale Conosco (site)",
+    "Contato(e-mail)",
+    "Lig. Cliente",
+    "Evento Físico",
+    "Indic. Clientes",
+    "Indic. Parceiros",
+    "LC",
+    "Mailing RD MKT",
+    "Linkedln",
+    "Google Ads",
+    "Instagram",
+    "Facebook",
+    "TLMKT",
+    "Visitas",
+    "Webinar",
+    "Grupo WhastsAPP",
+]
+
 ROLE_LABEL = {
     "administrador": "Administrador",
     "vendedor": "Vendedor",

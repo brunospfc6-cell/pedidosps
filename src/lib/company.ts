@@ -14,7 +14,7 @@ export const PARS_CNPJ = "27.626.290/0001-30";
 export const SIGNATURE_IDENTITY = {
   role: "Diretor",
   company: "Pro-Systems Informática Ltda.",
-  cnpjLine: "CNPJ n° 03.620.200/0001-35",
+  cnpjLine: "CNPJ 03.620.200/0001-35",
 } as const;
 
 export const MIN_NET_BRL = 20;

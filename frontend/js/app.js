@@ -489,7 +489,7 @@ function drawOdc(o, suppliers, products, credits) {
           : ""
       }
       <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Assinatura</h3></div>
-        <div class="bd"><div class="sig"><div class="line"></div><div class="id">Diretor<br>Pro-Systems Informática Ltda.<br>CNPJ n° 03.620.200/0001-35</div></div></div></div>
+        <div class="bd"><div class="sig"><div class="line"></div><div class="id">Diretor<br>Pro-Systems Informática Ltda.<br>CNPJ 03.620.200/0001-35</div></div></div></div>
     </form>
     </fieldset>
     <div class="row-actions" style="padding-bottom:40px">
@@ -744,7 +744,7 @@ async function renderSalesForm(unused, id) {
         <p><strong>Total da Venda: <span id="stotal">${brl(existing?.sale_total_brl || 0)}</span></strong></p>
       </div></div>
       <div class="card"><div class="hd"><h3>Assinatura</h3></div>
-        <div class="bd"><div class="sig"><div class="line"></div><div class="id">Diretor<br>Pro-Systems Informática Ltda.<br>CNPJ n° 03.620.200/0001-35</div></div></div></div>
+        <div class="bd"><div class="sig"><div class="line"></div><div class="id">Diretor<br>Pro-Systems Informática Ltda.<br>CNPJ 03.620.200/0001-35</div></div></div></div>
     </form></fieldset>
     <div class="row-actions" style="margin-top:16px;padding-bottom:40px">
       ${locked ? "" : `<button class="btn primary" id="save">Salvar Pedido de Venda</button>`}

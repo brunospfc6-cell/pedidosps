@@ -42,7 +42,7 @@ COMPANY = {
 SIGNATURE = {
     "role": "Diretor",
     "company": "Pro-Systems Informática Ltda.",
-    "cnpjLine": "CNPJ n° 03.620.200/0001-35",
+    "cnpjLine": "CNPJ 03.620.200/0001-35",
 }
 
 PARS = {

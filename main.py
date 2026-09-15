@@ -596,6 +596,14 @@ def export_csv(request: Request, kind: str = "odc"):
 
 
 # ── Frontend ──────────────────────────────────────────
+@app.get("/favicon.ico")
+def favicon():
+    ico = FRONTEND / "favicon.ico"
+    if ico.is_file():
+        return FileResponse(ico, media_type="image/x-icon", headers={"Cache-Control": "public, max-age=86400"})
+    raise HTTPException(404)
+
+
 @app.get("/")
 def index():
     return FileResponse(FRONTEND / "index.html", headers=NO_STORE)

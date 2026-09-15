@@ -655,7 +655,7 @@ export function OdcForm({
           <CardTitle>Faturamento e Cobrança</CardTitle>
         </CardHeader>
         <CardContent className="text-sm leading-relaxed text-muted-foreground">
-          <p className="font-medium text-foreground">Pro-Systems Informatica LTDA</p>
+          <p className="font-medium text-foreground">Pro-Systems Informática LTDA</p>
           <p>SRTV/Sul Quadra 701, Palácio do Rádio I, S/N SL 209</p>
           <p>CEP 70.340-901 — Brasília/DF</p>
           <p>CNPJ: 03.620.200/0001-35 · Inscrição Estadual: 0731060800113</p>

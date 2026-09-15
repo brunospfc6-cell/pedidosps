@@ -199,7 +199,7 @@ function renderLogin() {
         <h2>Controle de Compras<br>e Vendas Autodesk.</h2>
         <p class="muted" style="color:#8b959e;margin-top:12px">Ordens de Compra, Pedidos de Venda, créditos HubGov e gestão comercial.</p>
       </div>
-      <p style="font-size:12px;color:#8b959e">Pro-Systems Informatica LTDA · CNPJ 03.620.200/0001-35 · Brasília/DF</p>
+      <p style="font-size:12px;color:#8b959e">Pro-Systems Informática LTDA · CNPJ 03.620.200/0001-35 · Brasília/DF</p>
     </section>
     <section class="login-form">
       <form class="login-box" id="f">
@@ -484,7 +484,7 @@ function drawOdc(o, suppliers, products, credits) {
       ${
         o.client_type
           ? `<div class="card" style="margin-bottom:16px"><div class="hd"><h3>Faturamento e Cobrança</h3></div>
-        <div class="bd muted"><p style="color:var(--fg);font-weight:600;margin:0">Pro-Systems Informatica LTDA</p>
+        <div class="bd muted"><p style="color:var(--fg);font-weight:600;margin:0">Pro-Systems Informática LTDA</p>
         <p>SRTV/Sul Quadra 701, Palácio do Rádio I, S/N SL 209<br>CEP 70.340-901 — Brasília/DF<br>CNPJ: 03.620.200/0001-35 · IE: 0731060800113 · Fone: 61-3202.2666</p></div></div>`
           : ""
       }

@@ -29,7 +29,7 @@ GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 COMPANY = {
-    "name": "Pro-Systems Informatica LTDA",
+    "name": "Pro-Systems Informática LTDA",
     "shortName": "Pro-Systems",
     "addressLine1": "SRTV/Sul Quadra 701, Palácio do Rádio I, S/N SL 209",
     "addressLine2": "CEP 70.340-901 — Brasília/DF",

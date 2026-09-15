@@ -54,7 +54,14 @@ function Install-ProSystemsShortcut {
         $lnk.WindowStyle = 7
         $lnk.WorkingDirectory = $AppDir
         $lnk.Description = "Pro-Systems Compras e Vendas"
-        $lnk.IconLocation = "$env:SystemRoot\System32\url.dll,0"
+        $ico = Join-Path $AppDir "frontend\favicon.ico"
+        if (-not (Test-Path $ico)) { $ico = Join-Path $PSScriptRoot "Pro-Systems.ico" }
+        if (Test-Path $ico) {
+            Copy-Item $ico (Join-Path $d "Pro-Systems.ico") -Force
+            $lnk.IconLocation = (Join-Path $d "Pro-Systems.ico") + ",0"
+        } else {
+            $lnk.IconLocation = "$env:SystemRoot\System32\url.dll,0"
+        }
         $lnk.Save()
         Write-Host "Atalho criado: $lnkPath"
     }

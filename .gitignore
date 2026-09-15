@@ -1,0 +1,13 @@
+.venv/
+venv/
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.db-journal
+.DS_Store
+node_modules/
+.vercel/

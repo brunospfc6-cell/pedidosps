@@ -1,0 +1,40 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Pro-Systems · Compras e Vendas",
+      "hasCanvas": false,
+      "bodyTextLen": 362,
+      "bodyTextHash": "21139b889d8436a3b14c269e36be6c5ed614e98c9a932fc243e6655f58ff334d",
+      "bodyTextPrefix": "PS Pro-Systems Controle de compras e vendas Autodesk. Ordens de ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Pro-Systems · Compras e Vendas",
+      "hasCanvas": false,
+      "bodyTextLen": 160,
+      "bodyTextHash": "8a8c36a9de5d94c0131e52577c314a60c81c39908a89ce434ebfa50690302f72",
+      "bodyTextPrefix": "PS Pro-Systems ACESSO Entrar Use o login gerado pelo administrad",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [
+    "BRAND NOTE: no custom public/og.jpg — the platform will serve the og.grok.me placeholder. Custom cards are the default for games of every kind (DOM board/word games included), whimsical apps, creative tools, and brand-forward pages — only plain utilities (converters, CRUD trackers, admin dashboards) keep the placeholder. If this app is not a plain utility, finish the brand-asset pass per /workspace/.grok/skills/og/SKILL.md."
+  ],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": false,
+  "baselineReasons": []
+}

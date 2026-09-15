@@ -1,0 +1,5 @@
+Pasta do banco SQLite.
+
+O arquivo app.db e criado automaticamente na primeira execucao.
+Backup: copie esta pasta inteira com o aplicativo fechado.
+Restore: cole de volta no mesmo lugar (substituindo app.db).

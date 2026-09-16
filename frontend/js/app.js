@@ -46,6 +46,14 @@ const CONTACT_ORIGINS = [
   "Webinar",
   "Grupo WhastsAPP",
 ];
+function paymentTermsOf(o) {
+  if (o?.payment_terms) return o.payment_terms;
+  if (o?.payment_term_days) return `${o.payment_term_days} dias`;
+  return "";
+}
+function isProrata(o) {
+  return o?.prorata === 1 || o?.prorata === true || o?.prorata === "1";
+}
 function esc(s) {
   return String(s ?? "")
     .replace(/&/g, "&" + "amp;")
@@ -338,7 +346,11 @@ function attachPickers(root, products, saleKind) {
           input.value = p.product_line || p.name;
           wrap.dataset.sku = p.sku;
           wrap.dataset.name = p.name;
+          wrap.dataset.catalogPrice = p.list_price_usd;
           wrap.dataset.price = p.list_price_usd;
+          const tr = wrap.closest("tr");
+          const priceInp = tr?.querySelector(".unit-usd");
+          if (priceInp) priceInp.value = p.list_price_usd;
           let hint = wrap.querySelector("p.mono");
           if (!hint) {
             hint = document.createElement("p");
@@ -442,14 +454,17 @@ function drawOdc(o, suppliers, products, credits) {
           <option value="renovacao" ${o.sale_kind === "renovacao" ? "selected" : ""}>Renovação de Licenças</option>
         </select></div>
       </div></div>
-      <div class="card" style="margin-bottom:16px"><div class="hd"><h3>2. Produtos Autodesk</h3><p class="muted">Tabela vigente Setembro 2026. Busque pelo SKU ou nome.</p></div>
+      <div class="card" style="margin-bottom:16px"><div class="hd" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div><h3>2. Produtos Autodesk</h3><p class="muted">Tabela vigente Setembro 2026. Busque pelo SKU ou nome.</p></div>
+        <label class="btn outline sm" style="cursor:pointer"><input type="checkbox" name="prorata" id="prorata" ${isProrata(o) ? "checked" : ""} style="width:auto;margin:0"> Pro-rata</label>
+      </div>
       <div class="bd">
-        <table class="data" id="items"><thead><tr><th>Produto</th><th>Qtd</th><th>Lista USD</th><th></th></tr></thead>
-        <tbody>${items.map((it, i) => itemRow(it, i)).join("")}</tbody></table>
+        <table class="data" id="items"><thead><tr><th>Produto</th><th>Qtd</th><th>Unit. USD</th><th></th></tr></thead>
+        <tbody>${items.map((it, i) => itemRow(it, i, isProrata(o))).join("")}</tbody></table>
         ${locked ? "" : `<button type="button" class="btn outline" id="add">Adicionar Produto</button>`}
         <div class="grid g3" style="margin-top:16px">
           <div class="field"><label>Dólar do Dia (R$)</label><input name="dollar_rate" type="number" step="0.0001" value="${o.dollar_rate || ""}"></div>
-          <div class="field"><label>Prazo de Pagamento (Dias)</label><input name="payment_term_days" type="number" value="${o.payment_term_days || 30}"></div>
+          <div class="field"><label>Condição de Pagamento</label><input name="payment_terms" placeholder="Ex.: 30 dias, à vista, 15/30/45" value="${esc(paymentTermsOf(o) || "30 dias")}"></div>
           <div class="field"><label>Entrega das Licenças</label><select name="license_delivery">
             <option value="imediato">Imediato</option>
             <option value="agendada" ${o.license_delivery === "agendada" ? "selected" : ""}>Escolher Data de Ativação</option>
@@ -485,11 +500,11 @@ function drawOdc(o, suppliers, products, credits) {
         o.client_type
           ? `<div class="card" style="margin-bottom:16px"><div class="hd"><h3>Faturamento e Cobrança</h3></div>
         <div class="bd muted"><p style="color:var(--fg);font-weight:600;margin:0">Pro-Systems Informática LTDA</p>
-        <p>SRTV/Sul Quadra 701, Palácio do Rádio I, S/N SL 209<br>CEP 70.340-901 — Brasília/DF<br>CNPJ: 03.620.200/0001-35 · IE: 0731060800113 · Fone: 61-3202.2666</p></div></div>`
+        <p>SRTV/Sul Quadra 701, Palácio do Rádio I, N° 130 SL 209<br>CEP 70340-901 — Brasília/DF<br>CNPJ: 03.620.200/0001-35 · IE: 0731060800113 · Fone: 61-3202.2666</p></div></div>`
           : ""
       }
       <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Assinatura</h3></div>
-        <div class="bd"><div class="sig"><div class="line"></div><div class="id">Diretor<br>Pro-Systems Informática Ltda.<br>CNPJ 03.620.200/0001-35</div></div></div></div>
+        <div class="bd"><div class="sig"><div class="id">Diretor<br>Pro-Systems Informática Ltda.<br>CNPJ 03.620.200/0001-35</div></div></div></div>
     </form>
     </fieldset>
     <div class="row-actions" style="padding-bottom:40px">
@@ -513,13 +528,15 @@ function drawOdc(o, suppliers, products, credits) {
   $("#add")?.addEventListener("click", () => {
     const tb = $("#items tbody");
     const i = tb.children.length;
-    tb.insertAdjacentHTML("beforeend", itemRow({}, i));
+    tb.insertAdjacentHTML("beforeend", itemRow({}, i, $("#prorata")?.checked));
     attachPickers(tb.lastElementChild, products, form.sale_kind.value);
   });
   form.addEventListener("picked", (e) => {
     const wrap = e.target.closest(".picker");
     const tr = wrap.closest("tr");
-    $(".usd", tr).textContent = usd(wrap.dataset.price);
+    const price = Number(wrap.dataset.price || 0);
+    const inp = $(".unit-usd", tr);
+    if (inp) inp.value = price;
     refreshTotals();
   });
   form.client_csn?.addEventListener("blur", async () => {
@@ -542,7 +559,7 @@ function drawOdc(o, suppliers, products, credits) {
         product_name: p.dataset.name || $(".pq", p).value,
         sku: p.dataset.sku || "",
         qty: Number($(".qty", tr).value || 1),
-        list_price_usd: Number(p.dataset.price || 0),
+        list_price_usd: Number($(".unit-usd", tr)?.value || p.dataset.price || 0),
       };
     }).filter((it) => it.product_name);
     const body = {
@@ -556,7 +573,8 @@ function drawOdc(o, suppliers, products, credits) {
       hubgov_credit_pct: Number(form.hubgov_credit_pct?.value || 0),
       license_delivery: form.license_delivery.value,
       activation_date: form.activation_date?.value || null,
-      payment_term_days: Number(form.payment_term_days.value || 30),
+      payment_terms: form.payment_terms.value,
+      prorata: $("#prorata")?.checked ? 1 : 0,
       credit_used: Number(form.credit_used?.value || 0),
       credit_nf: form.credit_nf?.value,
       client_csn: form.client_csn.value,
@@ -598,10 +616,27 @@ function drawOdc(o, suppliers, products, credits) {
   });
   refreshTotals();
   form.addEventListener("input", refreshTotals);
+  function syncProrata() {
+    const on = $("#prorata")?.checked;
+    $$("#items .unit-usd").forEach((inp) => {
+      inp.disabled = !on;
+      if (!on) {
+        const cat = inp.closest("tr")?.querySelector(".picker")?.dataset.catalogPrice;
+        if (cat) {
+          inp.value = cat;
+          const p = inp.closest("tr").querySelector(".picker");
+          if (p) p.dataset.price = cat;
+        }
+      }
+    });
+    refreshTotals();
+  }
+  $("#prorata")?.addEventListener("change", syncProrata);
+  syncProrata();
   async function refreshTotals() {
     const items = $$("#items tbody tr").map((tr) => ({
       qty: Number($(".qty", tr)?.value || 1),
-      list_price_usd: Number($(".picker", tr)?.dataset.price || 0),
+      list_price_usd: Number($(".unit-usd", tr)?.value || $(".picker", tr)?.dataset.price || 0),
     }));
     try {
       const t = await api("/api/odc/calc", {
@@ -619,20 +654,21 @@ function drawOdc(o, suppliers, products, credits) {
         <p>Desconto: − ${brl(t.discount_amount)}</p>
         ${gov ? `<p>Crédito HubGov gerado: ${brl(t.credit_generated)}</p>` : ""}
         <p>Crédito utilizado: ${brl(form.credit_used?.value || 0)}</p>
-        <p><strong>Líquido: ${brl(t.net_total_brl)}</strong></p>`;
+        <p><strong>Valor Final: ${brl(t.net_total_brl)}</strong></p>`;
     } catch {}
   }
 }
 
-function itemRow(it = {}, i) {
+function itemRow(it = {}, i, prorata = false) {
+  const price = it.list_price_usd || "";
   return `<tr>
-    <td><div class="picker" data-sku="${esc(it.sku || "")}" data-name="${esc(it.product_name || "")}" data-price="${it.list_price_usd || 0}">
+    <td><div class="picker" data-sku="${esc(it.sku || "")}" data-name="${esc(it.product_name || "")}" data-price="${it.list_price_usd || 0}" data-catalog-price="${it.list_price_usd || 0}">
       <input class="pq" placeholder="Buscar SKU, produto ou linha…" autocomplete="off" value="${esc(it.product_name || it.sku || "")}">
       <input type="hidden" class="pid" value="${it.product_id || ""}">
-      ${it.sku ? `<p class="mono muted">${esc(it.sku)} · ${usd(it.list_price_usd)}</p>` : ""}
+      ${it.sku ? `<p class="mono muted">${esc(it.sku)}</p>` : ""}
     </div></td>
     <td style="width:90px"><input class="qty" type="number" min="1" value="${it.qty || 1}"></td>
-    <td class="usd">${it.list_price_usd ? usd(it.list_price_usd) : "—"}</td>
+    <td style="width:130px"><input class="unit-usd" type="number" step="0.01" min="0" value="${price}" ${prorata ? "" : "disabled"}></td>
     <td></td>
   </tr>`;
 }
@@ -723,19 +759,23 @@ async function renderSalesForm(unused, id) {
         <div class="field" id="aceite"><label>Data do Aceite</label><input type="date" name="acceptance_date" value="${esc(existing?.acceptance_date || "")}"></div>
         <div class="field"><label>Margem Utilizada (%)</label><input name="margin_pct" type="number" step="0.01" value="${existing?.margin_pct || 0}"></div>
         <div class="field"><label>Vendedor</label><input name="seller_name" value="${esc(existing?.seller_name || me.name)}"></div>
-        <div class="field"><label>Prazo de Pagamento (Dias)</label><input name="payment_term_days" type="number" value="${existing?.payment_term_days || odc.payment_term_days || 30}"></div>
+        <div class="field"><label>Condição de Pagamento</label><input name="payment_terms" placeholder="Ex.: 30 dias, à vista, 15/30/45" value="${esc(paymentTermsOf(existing) || paymentTermsOf(odc) || "30 dias")}"></div>
         <div class="field"><label>Nome de Contato (Interno)</label><input name="finance_contact_name" value="${esc(existing?.finance_contact_name || "")}"></div>
         <div class="field"><label>Telefone / E-mail de Contato (Interno)</label><input name="finance_contact" value="${esc(existing?.finance_contact || "")}"></div>
       </div>
       <div class="bd" style="padding-top:0">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <label class="btn outline sm" style="cursor:pointer"><input type="checkbox" name="prorata" id="pv-prorata" ${isProrata(existing) ? "checked" : ""} style="width:auto;margin:0"> Pro-rata</label>
+        </div>
         <table class="data"><thead><tr><th>Produto</th><th>Qtd</th><th>Valor Unitário (R$)</th><th>Total</th></tr></thead>
         <tbody id="sit">${items
           .map(
             (it, i) => `<tr>
             <td>${esc(it.product_name)}<br><span class="mono muted">${esc(it.sku)}</span>
-              <input type="hidden" class="pname" value="${esc(it.product_name)}"><input type="hidden" class="sku" value="${esc(it.sku)}"></td>
+              <input type="hidden" class="pname" value="${esc(it.product_name)}"><input type="hidden" class="sku" value="${esc(it.sku)}">
+              <input type="hidden" class="list-unit" value="${it.unit_price_brl || 0}"></td>
             <td><input class="qty" type="number" value="${it.qty}"></td>
-            <td><input class="unit" type="number" step="0.01" value="${it.unit_price_brl || ""}"></td>
+            <td><input class="unit" type="number" step="0.01" value="${it.unit_price_brl || ""}" ${isProrata(existing) ? "" : "disabled"}></td>
             <td class="line">${brl((it.qty || 0) * (it.unit_price_brl || 0))}</td>
           </tr>`,
           )
@@ -744,7 +784,7 @@ async function renderSalesForm(unused, id) {
         <p><strong>Total da Venda: <span id="stotal">${brl(existing?.sale_total_brl || 0)}</span></strong></p>
       </div></div>
       <div class="card"><div class="hd"><h3>Assinatura</h3></div>
-        <div class="bd"><div class="sig"><div class="line"></div><div class="id">Diretor<br>Pro-Systems Informática Ltda.<br>CNPJ 03.620.200/0001-35</div></div></div></div>
+        <div class="bd"><div class="sig"><div class="id">Diretor<br>Pro-Systems Informática Ltda.<br>CNPJ 03.620.200/0001-35</div></div></div></div>
     </form></fieldset>
     <div class="row-actions" style="margin-top:16px;padding-bottom:40px">
       ${locked ? "" : `<button class="btn primary" id="save">Salvar Pedido de Venda</button>`}
@@ -772,6 +812,18 @@ async function renderSalesForm(unused, id) {
     });
     $("#stotal").textContent = brl(tot);
   });
+  function syncPvProrata() {
+    const on = $("#pv-prorata")?.checked;
+    $$("#sit .unit").forEach((inp) => {
+      inp.disabled = !on;
+      if (!on) {
+        const orig = inp.closest("tr")?.querySelector(".list-unit")?.value;
+        if (orig) inp.value = orig;
+      }
+    });
+    form.dispatchEvent(new Event("input"));
+  }
+  $("#pv-prorata")?.addEventListener("change", syncPvProrata);
   $("#save")?.addEventListener("click", async () => {
     try {
       if (!form.contact_origin.value) {
@@ -791,7 +843,8 @@ async function renderSalesForm(unused, id) {
         seller_name: form.seller_name.value,
         finance_contact_name: form.finance_contact_name.value,
         finance_contact: form.finance_contact.value,
-        payment_term_days: Number(form.payment_term_days.value || 0),
+        payment_terms: form.payment_terms.value,
+        prorata: $("#pv-prorata")?.checked ? 1 : 0,
         items: $$("#sit tr").map((tr) => ({
           product_name: $(".pname", tr).value,
           sku: $(".sku", tr).value,

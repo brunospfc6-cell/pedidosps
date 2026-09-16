@@ -356,7 +356,7 @@ export function OdcForm({
                 <tr className="text-left text-xs text-muted-foreground">
                   <th className="pb-2 font-medium">Produto</th>
                   <th className="w-20 pb-2 font-medium">Qtd</th>
-                  <th className="w-32 pb-2 font-medium">Lista USD</th>
+                  <th className="w-32 pb-2 font-medium">Unit. USD</th>
                   <th className="w-32 pb-2 font-medium">Total USD</th>
                   <th className="w-12 pb-2" />
                 </tr>
@@ -656,8 +656,8 @@ export function OdcForm({
         </CardHeader>
         <CardContent className="text-sm leading-relaxed text-muted-foreground">
           <p className="font-medium text-foreground">Pro-Systems Informática LTDA</p>
-          <p>SRTV/Sul Quadra 701, Palácio do Rádio I, S/N SL 209</p>
-          <p>CEP 70.340-901 — Brasília/DF</p>
+          <p>SRTV/Sul Quadra 701, Palácio do Rádio I, N° 130 SL 209</p>
+          <p>CEP 70340-901 — Brasília/DF</p>
           <p>CNPJ: 03.620.200/0001-35 · Inscrição Estadual: 0731060800113</p>
           <p>Fone: 61-3202.2666</p>
         </CardContent>

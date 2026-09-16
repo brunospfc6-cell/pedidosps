@@ -73,7 +73,6 @@ function signatureBlockHtml() {
       <table class="sig-block" width="100%">
         <tr>
           <td align="center" style="padding-top:36pt;border:none;text-align:center">
-            <p style="border-bottom:1px solid #1a232d;width:260pt;margin:0 auto 10pt;font-size:11pt;">&nbsp;</p>
             <p style="margin:0;font-size:11pt;">${escapeHtml(SIGNATURE_IDENTITY.role)}</p>
             <p style="margin:0;font-size:11pt;">${escapeHtml(SIGNATURE_IDENTITY.company)}</p>
             <p style="margin:0;font-size:11pt;">${escapeHtml(SIGNATURE_IDENTITY.cnpjLine)}</p>
@@ -86,13 +85,8 @@ function documentHeaderHtml(title: string, subtitle: string) {
   return `
     <table class="doc-head" width="100%">
       <tr>
-        <td width="240" valign="middle">
+        <td align="center" style="text-align:center;padding-bottom:12pt">
           <img class="doc-logo" src="${LOGO_DATA_URI}" width="220" height="47" alt="Pro-Systems" />
-        </td>
-        <td valign="middle">
-          <p><strong>${escapeHtml(COMPANY.name)}</strong></p>
-          <p class="muted">${escapeHtml(COMPANY.tagline)}</p>
-          <p class="muted">${escapeHtml(COMPANY.addressLine1)} · ${escapeHtml(COMPANY.phone)}</p>
         </td>
       </tr>
     </table>
@@ -140,16 +134,18 @@ export function odcDocumentHtml(order: PurchaseOrder, opts?: { includeStatus?: b
       </div>
       <h2>2. Produtos Autodesk</h2>
       <table>
-        <thead><tr><th>SKU</th><th>Produto</th><th class="num">Qtd</th><th class="num">Lista USD</th><th class="num">Total USD</th><th class="num">Total BRL</th></tr></thead>
+        <thead><tr><th>SKU</th><th>Produto</th><th class="num">Qtd</th><th class="num">Unit. USD</th><th class="num">Total USD</th><th class="num">Total BRL</th></tr></thead>
         <tbody>${items}</tbody>
       </table>
+      <div class="box">
+        <p>Crédito utilizado${order.creditNf ? ` (NF ${escapeHtml(order.creditNf)})` : ""}: ${brl(order.creditUsed)}</p>
+        <p><strong>Valor Final: ${brl(order.netTotalBrl)}</strong></p>
+      </div>
       <div class="box">
         <p>Câmbio do Dia: R$ ${order.dollarRate.toFixed(4)}</p>
         <p>Lista BRL: ${brl(order.listTotalBrl)}</p>
         <p>Desconto ${order.discountPct}%: − ${brl(order.discountAmount)}</p>
         <p>Crédito HubGov gerado (${order.hubgovCreditPct}% sobre lista): ${brl(order.creditGenerated)}</p>
-        <p>Crédito utilizado${order.creditNf ? ` (NF ${escapeHtml(order.creditNf)})` : ""}: ${brl(order.creditUsed)}</p>
-        <p><strong>Valor Líquido: ${brl(order.netTotalBrl)}</strong></p>
         <p>Entrega das Licenças: ${order.licenseDelivery === "imediato" ? "Imediato" : `Ativação em ${formatDateBR(order.activationDate)}`}</p>
         <p>Prazo de Pagamento: ${order.paymentTermDays} dias</p>
         ${special}

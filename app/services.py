@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from fastapi import HTTPException
@@ -7,6 +8,26 @@ from fastapi import HTTPException
 from . import db
 from .calc import build_memo, compute_odc
 from .config import CONTACT_ORIGINS, DEFAULT_HUBGOV_PCT, MIN_NET_BRL
+
+
+def normalize_terms(data, default_days=30):
+    text = (data.get("payment_terms") or "").strip()
+    days = data.get("payment_term_days")
+    try:
+        days = int(days) if days not in (None, "") else None
+    except (TypeError, ValueError):
+        days = None
+    if not text and days:
+        text = f"{days} dias"
+    if days is None:
+        m = re.search(r"\d+", text or "")
+        days = int(m.group(0)) if m else default_days
+    return text, days
+
+
+def flag_prorata(data) -> int:
+    v = data.get("prorata")
+    return 1 if v in (True, 1, "1", "true", "on", "yes") else 0
 
 
 def pad(n: int, width: int = 6) -> str:
@@ -124,6 +145,8 @@ def save_odc(conn, user: dict, data: dict) -> dict:
     odc_id = data.get("id")
     status = "pendente_envio" if finalize else "rascunho"
     client_id = upsert_client(conn, user["id"], data)
+    terms, days = normalize_terms(data)
+    prorata = flag_prorata(data)
 
     if odc_id:
         existing = db.one(conn.execute("SELECT * FROM purchase_orders WHERE id = ?", (odc_id,)))
@@ -137,7 +160,8 @@ def save_odc(conn, user: dict, data: dict) -> dict:
             """UPDATE purchase_orders SET
                order_date=?, supplier_id=?, client_type=?, sale_kind=?, status=?,
                dollar_rate=?, discount_pct=?, hubgov_credit_pct=?, license_delivery=?,
-               activation_date=?, payment_term_days=?, credit_used=?, credit_nf=?,
+               activation_date=?, payment_term_days=?, payment_terms=?, prorata=?,
+               credit_used=?, credit_nf=?,
                special_condition=?, special_approved_by=?, client_id=?, client_csn=?,
                client_name=?, client_document=?, client_email=?, client_manager=?,
                client_phone=?, renewal_contracts=?, notes=?,
@@ -148,7 +172,7 @@ def save_odc(conn, user: dict, data: dict) -> dict:
                 data["order_date"], data["supplier_id"], data["client_type"], data["sale_kind"], status,
                 data["dollar_rate"], data.get("discount_pct") or 0, hub,
                 data.get("license_delivery") or "imediato", data.get("activation_date"),
-                data.get("payment_term_days") or 30, data.get("credit_used") or 0,
+                days, terms, prorata, data.get("credit_used") or 0,
                 data.get("credit_nf"), data.get("special_condition"), data.get("special_approved_by"),
                 client_id, data["client_csn"].strip(), data["client_name"].strip(),
                 data["client_document"].strip(), data.get("client_email"), data.get("client_manager"),
@@ -164,16 +188,16 @@ def save_odc(conn, user: dict, data: dict) -> dict:
             """INSERT INTO purchase_orders (
                  number, seq, order_date, supplier_id, client_type, sale_kind, status,
                  dollar_rate, discount_pct, hubgov_credit_pct, license_delivery, activation_date,
-                 payment_term_days, credit_used, credit_nf, special_condition, special_approved_by,
+                 payment_term_days, payment_terms, prorata, credit_used, credit_nf, special_condition, special_approved_by,
                  client_id, client_csn, client_name, client_document, client_email, client_manager,
                  client_phone, renewal_contracts, notes, list_total_usd, list_total_brl,
                  discount_amount, net_total_brl, credit_generated, created_by
-               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 number, seq, data["order_date"], data["supplier_id"], data["client_type"],
                 data["sale_kind"], status, data["dollar_rate"], data.get("discount_pct") or 0, hub,
                 data.get("license_delivery") or "imediato", data.get("activation_date"),
-                data.get("payment_term_days") or 30, data.get("credit_used") or 0,
+                days, terms, prorata, data.get("credit_used") or 0,
                 data.get("credit_nf"), data.get("special_condition"), data.get("special_approved_by"),
                 client_id, data["client_csn"].strip(), data["client_name"].strip(),
                 data["client_document"].strip(), data.get("client_email"), data.get("client_manager"),
@@ -255,6 +279,10 @@ def save_sales(conn, user: dict, data: dict) -> dict:
     origin = (data.get("contact_origin") or "").strip()
     if origin not in CONTACT_ORIGINS:
         raise HTTPException(400, "Informe a origem do contato.")
+    terms, days = normalize_terms(data, default_days=po.get("payment_term_days") or 30)
+    if not terms:
+        terms = (po.get("payment_terms") or "").strip() or (f"{days} dias" if days else "")
+    prorata = flag_prorata(data)
     sale_total = sum(float(it["qty"]) * float(it["unit_price_brl"]) for it in items)
     memo = data.get("calculation_memo") or build_memo(
         compute_odc(
@@ -273,13 +301,13 @@ def save_sales(conn, user: dict, data: dict) -> dict:
         conn.execute(
             """UPDATE sales_orders SET order_date=?, client_type=?, contract_number=?, proposal_number=?,
                acceptance_date=?, margin_pct=?, seller_name=?, finance_contact_name=?, finance_contact=?,
-               contact_origin=?, payment_term_days=?, calculation_memo=?, credit_used=?, credit_generated=?,
-               sale_total_brl=?, updated_at=datetime('now') WHERE id=?""",
+               contact_origin=?, payment_term_days=?, payment_terms=?, prorata=?, calculation_memo=?,
+               credit_used=?, credit_generated=?, sale_total_brl=?, updated_at=datetime('now') WHERE id=?""",
             (
                 data["order_date"], data["client_type"], data.get("contract_number"), data.get("proposal_number"),
                 data.get("acceptance_date"), data.get("margin_pct") or 0, data.get("seller_name") or user["name"],
                 data.get("finance_contact_name"), data.get("finance_contact"), origin,
-                data.get("payment_term_days"), memo, po["credit_used"], po["credit_generated"], sale_total, so_id,
+                days, terms, prorata, memo, po["credit_used"], po["credit_generated"], sale_total, so_id,
             ),
         )
         conn.execute("DELETE FROM sales_order_items WHERE sales_order_id = ?", (so_id,))
@@ -289,14 +317,14 @@ def save_sales(conn, user: dict, data: dict) -> dict:
             """INSERT INTO sales_orders (
                  number, seq, purchase_order_id, order_date, client_type, contract_number, proposal_number,
                  acceptance_date, margin_pct, seller_id, seller_name, finance_contact_name, finance_contact,
-                 contact_origin, payment_term_days, calculation_memo, credit_used, credit_generated,
-                 sale_total_brl, created_by
-               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                 contact_origin, payment_term_days, payment_terms, prorata, calculation_memo, credit_used,
+                 credit_generated, sale_total_brl, created_by
+               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 number, seq, po["id"], data["order_date"], data["client_type"], data.get("contract_number"),
                 data.get("proposal_number"), data.get("acceptance_date"), data.get("margin_pct") or 0,
                 user["id"], data.get("seller_name") or user["name"], data.get("finance_contact_name"),
-                data.get("finance_contact"), origin, data.get("payment_term_days"), memo, po["credit_used"],
+                data.get("finance_contact"), origin, days, terms, prorata, memo, po["credit_used"],
                 po["credit_generated"], sale_total, user["id"],
             ),
         )

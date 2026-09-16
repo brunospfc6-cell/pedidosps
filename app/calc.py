@@ -1,6 +1,11 @@
 from .config import DEFAULT_HUBGOV_PCT, MIN_NET_BRL
 
 
+def _br(n, decimals=2) -> str:
+    s = f"{float(n or 0):,.{decimals}f}"
+    return s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def compute_odc(items, dollar_rate, discount_pct, client_type, hubgov_credit_pct, credit_used):
     list_total_usd = sum((float(it.get("qty") or 0) * float(it.get("list_price_usd") or 0)) for it in items)
     rate = float(dollar_rate or 0)
@@ -28,21 +33,21 @@ def compute_odc(items, dollar_rate, discount_pct, client_type, hubgov_credit_pct
 def build_memo(calc, dollar_rate, discount_pct, client_type, credit_used):
     lines = [
         "Memória de Cálculo — Ordem de Compra",
-        f"Lista USD: {calc['list_total_usd']:.2f}",
-        f"Câmbio do Dia: R$ {float(dollar_rate):.4f}",
-        f"Lista BRL: R$ {calc['list_total_brl']:.2f}",
-        f"Desconto ({float(discount_pct):.2f}%): − R$ {calc['discount_amount']:.2f}",
-        f"Após desconto: R$ {calc['after_discount']:.2f}",
+        f"Lista USD: US$ {_br(calc['list_total_usd'])}",
+        f"Câmbio do Dia: R$ {_br(dollar_rate, 4)}",
+        f"Lista BRL: R$ {_br(calc['list_total_brl'])}",
+        f"Desconto ({_br(discount_pct)}%): − R$ {_br(calc['discount_amount'])}",
+        f"Após desconto: R$ {_br(calc['after_discount'])}",
     ]
     if client_type == "governo":
         lines.append(
-            f"Crédito HubGov gerado ({calc['hubgov_credit_pct'] or DEFAULT_HUBGOV_PCT}% sobre lista): "
-            f"R$ {calc['credit_generated']:.2f}"
+            f"Crédito HubGov gerado ({_br(calc['hubgov_credit_pct'] or DEFAULT_HUBGOV_PCT)}% sobre lista): "
+            f"R$ {_br(calc['credit_generated'])}"
         )
     else:
         lines.append("Cliente privado — não gera crédito HubGov.")
-    lines.append(f"Crédito utilizado: R$ {float(credit_used or 0):.2f}")
-    lines.append(f"Valor Líquido: R$ {calc['net_total_brl']:.2f}")
+    lines.append(f"Crédito utilizado: R$ {_br(credit_used)}")
+    lines.append(f"Valor Final: R$ {_br(calc['net_total_brl'])}")
     if calc["below_minimum"]:
-        lines.append(f"Atenção: valor líquido inferior ao mínimo de R$ {MIN_NET_BRL:.2f}.")
+        lines.append(f"Atenção: valor final inferior ao mínimo de R$ {_br(MIN_NET_BRL)}.")
     return "\n".join(lines)

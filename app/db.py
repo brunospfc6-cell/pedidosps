@@ -42,12 +42,16 @@ def tx():
 def init_db():
     conn = get_conn()
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(sales_orders)")}
-    if "contact_origin" not in cols:
-        conn.execute("ALTER TABLE sales_orders ADD COLUMN contact_origin TEXT")
-    hcols = {r[1] for r in conn.execute("PRAGMA table_info(hubgov_ledger)")}
-    if "notes" not in hcols:
-        conn.execute("ALTER TABLE hubgov_ledger ADD COLUMN notes TEXT")
+    def add_col(table, name, decl):
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if name not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+    add_col("sales_orders", "contact_origin", "TEXT")
+    add_col("sales_orders", "payment_terms", "TEXT")
+    add_col("sales_orders", "prorata", "INTEGER NOT NULL DEFAULT 0")
+    add_col("purchase_orders", "payment_terms", "TEXT")
+    add_col("purchase_orders", "prorata", "INTEGER NOT NULL DEFAULT 0")
+    add_col("hubgov_ledger", "notes", "TEXT")
     conn.commit()
 
 

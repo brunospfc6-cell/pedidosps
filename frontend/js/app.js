@@ -474,8 +474,13 @@ function drawOdc(o, suppliers, products, credits) {
           ${
             gov
               ? `<div class="field"><label>Percentual de Crédito HubGov Gerado</label><input name="hubgov_credit_pct" type="number" step="0.01" value="${o.hubgov_credit_pct || 8}"></div>
+                 <div class="field"><label>NF que gerou o crédito</label><input name="generated_nf" placeholder="Nota fiscal desta venda" value="${esc(o.generated_nf || o.hubgov?.nf_number || "")}"></div>
                  <div class="field"><label>Valor do Crédito Utilizado (R$)</label><input name="credit_used" type="number" step="0.01" value="${o.credit_used || 0}"></div>
-                 <div class="field"><label>NF que Gerou Este Crédito</label><input name="credit_nf" value="${esc(o.credit_nf || "")}"></div>`
+                 <div class="field"><label>NF do crédito utilizado</label>
+                   <input name="credit_nf" list="nfs-disp" value="${esc(o.credit_nf || "")}">
+                   <datalist id="nfs-disp">${(credits.available || []).map((c) => `<option value="${esc(c.nf)}">${esc(c.nf)} · ${brl(c.remaining)}</option>`).join("")}</datalist>
+                   <p class="muted" style="margin:4px 0 0">Disponível para uso: ${brl(credits.summary?.remaining || 0)}${(credits.summary?.pending || 0) > 0 ? ` · Pendente de habilitação: ${brl(credits.summary.pending)}` : ""}</p>
+                 </div>`
               : `<input type="hidden" name="hubgov_credit_pct" value="0"><input type="hidden" name="credit_used" value="0">`
           }
         </div>
@@ -507,6 +512,23 @@ function drawOdc(o, suppliers, products, credits) {
         <div class="bd"><div class="sig"><div class="id">Diretor<br>Pro-Systems Informática Ltda.<br>CNPJ 03.620.200/0001-35</div></div></div></div>
     </form>
     </fieldset>
+    ${
+      me.role === "administrador" && gov && o.hubgov
+        ? `<div class="card" style="margin:16px 0" id="hubgov-box">
+            <div class="hd"><h3>Gestão do crédito gerado</h3>
+              <p class="muted">${o.hubgov.enabled ? "Habilitado para uso." : "Pendente — não entra no saldo até o administrador habilitar."}</p>
+            </div>
+            <div class="bd grid g3">
+              <div class="field"><label>NF que gerou o crédito</label><input id="hg-nf" value="${esc(o.hubgov.nf_number || o.generated_nf || "")}"></div>
+              <div class="field"><label>Corrigir valor gerado (R$)</label><input id="hg-amt" type="number" step="0.01" value="${o.hubgov.amount || o.credit_generated || 0}"></div>
+              <div style="display:flex;align-items:end;gap:8px;flex-wrap:wrap">
+                ${o.hubgov.enabled ? "" : `<button type="button" class="btn primary" id="hg-enable">Habilitar para uso</button>`}
+                <button type="button" class="btn outline" id="hg-correct">Corrigir crédito gerado</button>
+              </div>
+            </div>
+          </div>`
+        : ""
+    }
     <div class="row-actions" style="padding-bottom:40px">
       ${locked ? (o.id ? `<a class="btn outline" href="/api/odc/${o.id}/word">Extrair Word</a>` : "") : `
         <button class="btn outline" id="draft">Salvar Rascunho</button>
@@ -517,6 +539,27 @@ function drawOdc(o, suppliers, products, credits) {
     </div>
   `);
   bindShell();
+  $("#hg-enable")?.addEventListener("click", async () => {
+    try {
+      await api(`/api/credits/${o.hubgov.id}/enable`, { method: "POST", body: { nf_number: $("#hg-nf").value } });
+      toast("Crédito habilitado para uso.");
+      route();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  });
+  $("#hg-correct")?.addEventListener("click", async () => {
+    try {
+      await api(`/api/credits/${o.hubgov.id}/correct`, {
+        method: "POST",
+        body: { amount: Number($("#hg-amt").value), nf_number: $("#hg-nf").value },
+      });
+      toast("Crédito gerado corrigido.");
+      route();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  });
   attachPickers(app, products, o.sale_kind);
   const form = $("#odc");
   form.sale_kind.onchange = () => {
@@ -577,6 +620,7 @@ function drawOdc(o, suppliers, products, credits) {
       prorata: $("#prorata")?.checked ? 1 : 0,
       credit_used: Number(form.credit_used?.value || 0),
       credit_nf: form.credit_nf?.value,
+      generated_nf: form.generated_nf?.value,
       client_csn: form.client_csn.value,
       client_name: form.client_name.value,
       client_document: form.client_document.value,
@@ -916,26 +960,75 @@ async function renderClients() {
 
 async function renderCredits() {
   const d = await api("/api/credits");
-  app.innerHTML = shell(`${head("Créditos HubGov", "Inclui o saldo de R$ 194.372,95 existente antes do sistema. Pedidos de governo geram crédito a partir de 8% sobre o valor de lista.")}
-    <div class="grid g3" style="margin-bottom:16px">
+  const admin = me.role === "administrador";
+  app.innerHTML = shell(`${head("Créditos HubGov", "Crédito gerado em pedido de governo só fica disponível depois que o administrador habilitar. O saldo inicial de R$ 194.372,95 já está habilitado.")}
+    <div class="grid g4" style="margin-bottom:16px">
       <div class="card stat"><small>Gerado</small><strong>${brl(d.summary.generated)}</strong></div>
+      <div class="card stat"><small>Pendente</small><strong>${brl(d.summary.pending || 0)}</strong></div>
       <div class="card stat"><small>Utilizado</small><strong>${brl(d.summary.used)}</strong></div>
-      <div class="card stat"><small>Saldo</small><strong>${brl(d.summary.remaining)}</strong></div>
+      <div class="card stat"><small>Disponível</small><strong>${brl(d.summary.remaining)}</strong></div>
     </div>
-    <div class="card"><div class="bd" style="padding:0">
-      <table class="data"><thead><tr><th>Data</th><th>Tipo</th><th>NF</th><th>Cliente</th><th class="num">Valor</th></tr></thead>
+    <div class="card"><div class="bd" style="padding:0;overflow:auto">
+      <table class="data"><thead><tr>
+        <th>Data</th><th>Tipo</th><th>NF geradora</th><th>Pedido</th><th>Cliente</th><th class="num">Valor</th><th>Status</th>${admin ? "<th></th>" : ""}
+      </tr></thead>
       <tbody>${(d.ledger || [])
         .map((r) => {
           const inicial = !r.purchase_order_id && r.kind === "generated";
-          return `<tr><td>${dateBR(r.created_at)}</td>
-          <td>${inicial ? "Saldo inicial" : r.kind === "generated" ? "Gerado" : "Utilizado"}</td>
-          <td class="mono">${esc(r.nf_number || "—")}</td>
-          <td>${esc(r.notes || r.client_name || "—")}</td>
-          <td class="num">${brl(r.amount)}</td></tr>`;
+          const enabled = r.kind !== "generated" || r.enabled === 1 || r.enabled === true || (r.enabled == null && inicial);
+          const pending = r.kind === "generated" && !enabled;
+          const tipo = inicial ? "Saldo inicial" : r.kind === "generated" ? "Gerado" : "Utilizado";
+          const st = r.kind === "used" ? badge("enviado_pars").replace("Enviado à PARS", "Baixado") : pending
+            ? `<span class="badge warn">Pendente</span>`
+            : `<span class="badge ok">Habilitado</span>`;
+          const acts = admin && r.kind === "generated"
+            ? `<div class="row-actions">
+                ${pending ? `<button class="btn primary sm hgen" data-id="${r.id}" data-nf="${esc(r.nf_number || r.generated_nf || "")}">Habilitar</button>` : ""}
+                <button class="btn outline sm hgcor" data-id="${r.id}" data-amt="${r.amount}" data-nf="${esc(r.nf_number || r.generated_nf || "")}">Corrigir</button>
+              </div>`
+            : "";
+          return `<tr>
+            <td>${dateBR(r.created_at)}</td>
+            <td>${tipo}</td>
+            <td class="mono">${esc(r.nf_number || r.generated_nf || "—")}</td>
+            <td class="mono">${r.purchase_order_id ? `<a href="#/odc/${r.purchase_order_id}">${esc(r.purchase_order_number || "")}</a>` : "—"}</td>
+            <td>${esc(r.notes && inicial ? r.notes : r.client_name || "—")}</td>
+            <td class="num">${brl(r.amount)}</td>
+            <td>${st}</td>
+            ${admin ? `<td>${acts}</td>` : ""}
+          </tr>`;
         })
         .join("")}</tbody></table>
     </div></div>`);
   bindShell();
+  $$(".hgen").forEach((b) => {
+    b.onclick = async () => {
+      const nf = prompt("Número da nota fiscal que gerou este crédito:", b.dataset.nf || "");
+      if (nf == null) return;
+      try {
+        await api(`/api/credits/${b.dataset.id}/enable`, { method: "POST", body: { nf_number: nf } });
+        toast("Crédito habilitado para uso.");
+        route();
+      } catch (e) {
+        toast(e.message, true);
+      }
+    };
+  });
+  $$(".hgcor").forEach((b) => {
+    b.onclick = async () => {
+      const amt = prompt("Novo valor do crédito gerado (R$):", b.dataset.amt || "");
+      if (amt == null) return;
+      const nf = prompt("NF que gerou o crédito (opcional):", b.dataset.nf || "");
+      if (nf == null) return;
+      try {
+        await api(`/api/credits/${b.dataset.id}/correct`, { method: "POST", body: { amount: Number(String(amt).replace(",", ".")), nf_number: nf } });
+        toast("Crédito gerado corrigido.");
+        route();
+      } catch (e) {
+        toast(e.message, true);
+      }
+    };
+  });
 }
 
 async function renderProducts() {

@@ -73,13 +73,30 @@ def upsert_client(conn, user_id: int, data: dict) -> int:
     return cur.lastrowid
 
 
-def validate_odc(data: dict, calc: dict, finalize: bool):
+def validate_odc(data: dict, calc: dict, finalize: bool, conn=None):
     if finalize and calc["below_minimum"]:
         raise HTTPException(400, f"O valor líquido não pode ser inferior a R$ {MIN_NET_BRL:.2f} ao utilizar crédito HubGov.")
     if data.get("client_type") == "governo" and finalize and float(data.get("hubgov_credit_pct") or 0) < 8:
         raise HTTPException(400, "Pedidos de governo devem gerar no mínimo 8% de crédito HubGov.")
-    if float(data.get("credit_used") or 0) > 0 and not (data.get("credit_nf") or "").strip():
+    used = float(data.get("credit_used") or 0)
+    if used > 0 and not (data.get("credit_nf") or "").strip():
         raise HTTPException(400, "Informe a nota fiscal que gerou o crédito HubGov utilizado.")
+    if used > 0 and conn is not None:
+        remaining = credit_summary(conn)["remaining"]
+        # when editing an existing ODC, its previous use is already in the ledger until we replace it
+        odc_id = data.get("id")
+        if odc_id:
+            prev = conn.execute(
+                "SELECT COALESCE(SUM(amount),0) AS n FROM hubgov_ledger WHERE purchase_order_id=? AND kind='used'",
+                (odc_id,),
+            ).fetchone()["n"]
+            remaining += float(prev or 0)
+        if used > remaining + 0.009:
+            raise HTTPException(
+                400,
+                f"Crédito insuficiente. Disponível para uso: R$ {remaining:,.2f} "
+                "(créditos recém-gerados precisam ser habilitados pelo administrador).".replace(",", "X").replace(".", ",").replace("X", "."),
+            )
     if data.get("license_delivery") == "agendada" and not data.get("activation_date"):
         raise HTTPException(400, "Informe a data de ativação das licenças.")
     if data.get("sale_kind") == "renovacao" and not (data.get("renewal_contracts") or "").strip():
@@ -105,6 +122,14 @@ def odc_with_items(conn, odc_id: int) -> dict | None:
         return None
     order["items"] = db.rows(
         conn.execute("SELECT * FROM purchase_order_items WHERE purchase_order_id = ? ORDER BY id", (odc_id,))
+    )
+    order["hubgov"] = db.one(
+        conn.execute(
+            """SELECT * FROM hubgov_ledger
+               WHERE purchase_order_id = ? AND kind = 'generated'
+               ORDER BY id DESC LIMIT 1""",
+            (odc_id,),
+        )
     )
     return order
 
@@ -141,12 +166,13 @@ def save_odc(conn, user: dict, data: dict) -> dict:
         data.get("credit_used"),
     )
     finalize = bool(data.get("finalize"))
-    validate_odc(data, calc, finalize)
+    validate_odc(data, calc, finalize, conn)
     odc_id = data.get("id")
     status = "pendente_envio" if finalize else "rascunho"
     client_id = upsert_client(conn, user["id"], data)
     terms, days = normalize_terms(data)
     prorata = flag_prorata(data)
+    generated_nf = (data.get("generated_nf") or "").strip() or None
 
     if odc_id:
         existing = db.one(conn.execute("SELECT * FROM purchase_orders WHERE id = ?", (odc_id,)))
@@ -161,7 +187,7 @@ def save_odc(conn, user: dict, data: dict) -> dict:
                order_date=?, supplier_id=?, client_type=?, sale_kind=?, status=?,
                dollar_rate=?, discount_pct=?, hubgov_credit_pct=?, license_delivery=?,
                activation_date=?, payment_term_days=?, payment_terms=?, prorata=?,
-               credit_used=?, credit_nf=?,
+               credit_used=?, credit_nf=?, generated_nf=?,
                special_condition=?, special_approved_by=?, client_id=?, client_csn=?,
                client_name=?, client_document=?, client_email=?, client_manager=?,
                client_phone=?, renewal_contracts=?, notes=?,
@@ -173,7 +199,7 @@ def save_odc(conn, user: dict, data: dict) -> dict:
                 data["dollar_rate"], data.get("discount_pct") or 0, hub,
                 data.get("license_delivery") or "imediato", data.get("activation_date"),
                 days, terms, prorata, data.get("credit_used") or 0,
-                data.get("credit_nf"), data.get("special_condition"), data.get("special_approved_by"),
+                data.get("credit_nf"), generated_nf, data.get("special_condition"), data.get("special_approved_by"),
                 client_id, data["client_csn"].strip(), data["client_name"].strip(),
                 data["client_document"].strip(), data.get("client_email"), data.get("client_manager"),
                 data.get("client_phone"), data.get("renewal_contracts"), data.get("notes"),
@@ -188,17 +214,17 @@ def save_odc(conn, user: dict, data: dict) -> dict:
             """INSERT INTO purchase_orders (
                  number, seq, order_date, supplier_id, client_type, sale_kind, status,
                  dollar_rate, discount_pct, hubgov_credit_pct, license_delivery, activation_date,
-                 payment_term_days, payment_terms, prorata, credit_used, credit_nf, special_condition, special_approved_by,
+                 payment_term_days, payment_terms, prorata, credit_used, credit_nf, generated_nf, special_condition, special_approved_by,
                  client_id, client_csn, client_name, client_document, client_email, client_manager,
                  client_phone, renewal_contracts, notes, list_total_usd, list_total_brl,
                  discount_amount, net_total_brl, credit_generated, created_by
-               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 number, seq, data["order_date"], data["supplier_id"], data["client_type"],
                 data["sale_kind"], status, data["dollar_rate"], data.get("discount_pct") or 0, hub,
                 data.get("license_delivery") or "imediato", data.get("activation_date"),
                 days, terms, prorata, data.get("credit_used") or 0,
-                data.get("credit_nf"), data.get("special_condition"), data.get("special_approved_by"),
+                data.get("credit_nf"), generated_nf, data.get("special_condition"), data.get("special_approved_by"),
                 client_id, data["client_csn"].strip(), data["client_name"].strip(),
                 data["client_document"].strip(), data.get("client_email"), data.get("client_manager"),
                 data.get("client_phone"), data.get("renewal_contracts"), data.get("notes"),
@@ -220,17 +246,29 @@ def save_odc(conn, user: dict, data: dict) -> dict:
             (odc_id, it.get("product_id"), it["product_name"], it.get("sku"), qty, price, line_usd, line_brl),
         )
 
+    prev_gen = db.one(
+        conn.execute(
+            """SELECT amount, enabled, nf_number FROM hubgov_ledger
+               WHERE purchase_order_id=? AND kind='generated' ORDER BY id DESC LIMIT 1""",
+            (odc_id,),
+        )
+    )
     conn.execute("DELETE FROM hubgov_ledger WHERE purchase_order_id = ?", (odc_id,))
     if finalize and data.get("client_type") == "governo" and calc["credit_generated"] > 0:
+        nf = generated_nf or (prev_gen.get("nf_number") if prev_gen else None)
+        enabled = 0
+        if prev_gen and abs(float(prev_gen["amount"] or 0) - float(calc["credit_generated"])) < 0.009:
+            enabled = 1 if prev_gen.get("enabled") in (1, None) else 0
         conn.execute(
-            """INSERT INTO hubgov_ledger (client_id, purchase_order_id, kind, amount, created_by)
-               VALUES (?,?, 'generated', ?, ?)""",
-            (client_id, odc_id, calc["credit_generated"], user["id"]),
+            """INSERT INTO hubgov_ledger
+               (client_id, purchase_order_id, kind, amount, nf_number, enabled, created_by)
+               VALUES (?,?, 'generated', ?, ?, ?, ?)""",
+            (client_id, odc_id, calc["credit_generated"], nf, enabled, user["id"]),
         )
     if finalize and float(data.get("credit_used") or 0) > 0:
         conn.execute(
-            """INSERT INTO hubgov_ledger (client_id, purchase_order_id, kind, amount, nf_number, created_by)
-               VALUES (?,?, 'used', ?, ?, ?)""",
+            """INSERT INTO hubgov_ledger (client_id, purchase_order_id, kind, amount, nf_number, enabled, created_by)
+               VALUES (?,?, 'used', ?, ?, 1, ?)""",
             (client_id, odc_id, data.get("credit_used") or 0, data.get("credit_nf"), user["id"]),
         )
     return odc_with_items(conn, odc_id)
@@ -352,21 +390,94 @@ def credit_summary(conn) -> dict:
     gen = conn.execute(
         "SELECT COALESCE(SUM(amount),0) AS n FROM hubgov_ledger WHERE kind='generated'"
     ).fetchone()["n"]
+    pending = conn.execute(
+        "SELECT COALESCE(SUM(amount),0) AS n FROM hubgov_ledger WHERE kind='generated' AND COALESCE(enabled,1)=0"
+    ).fetchone()["n"]
+    available_gen = conn.execute(
+        "SELECT COALESCE(SUM(amount),0) AS n FROM hubgov_ledger WHERE kind='generated' AND COALESCE(enabled,1)=1"
+    ).fetchone()["n"]
     used = conn.execute(
         "SELECT COALESCE(SUM(amount),0) AS n FROM hubgov_ledger WHERE kind='used'"
     ).fetchone()["n"]
-    return {"generated": gen, "used": used, "remaining": gen - used}
+    return {
+        "generated": gen,
+        "pending": pending,
+        "available": available_gen,
+        "used": used,
+        "remaining": available_gen - used,
+    }
 
 
 def available_credits(conn) -> list[dict]:
     return db.rows(
         conn.execute(
-            """SELECT nf_number AS nf,
-                      SUM(CASE WHEN kind='generated' THEN amount ELSE 0 END)
+            """SELECT COALESCE(NULLIF(nf_number,''), 'Saldo inicial') AS nf,
+                      SUM(CASE WHEN kind='generated' AND COALESCE(enabled,1)=1 THEN amount ELSE 0 END)
                     - SUM(CASE WHEN kind='used' THEN amount ELSE 0 END) AS remaining
                FROM hubgov_ledger
-               WHERE nf_number IS NOT NULL AND nf_number <> ''
-               GROUP BY nf_number
-               HAVING remaining > 0"""
+               GROUP BY COALESCE(NULLIF(nf_number,''), 'Saldo inicial')
+               HAVING remaining > 0.009"""
         )
     )
+
+
+def enable_credit(conn, user: dict, ledger_id: int, nf_number: str | None) -> dict:
+    if user["role"] != "administrador":
+        raise HTTPException(403, "Somente o administrador habilita créditos.")
+    row = db.one(conn.execute("SELECT * FROM hubgov_ledger WHERE id=?", (ledger_id,)))
+    if not row:
+        raise HTTPException(404, "Crédito não encontrado.")
+    if row["kind"] != "generated":
+        raise HTTPException(400, "Só é possível habilitar crédito gerado.")
+    if int(row.get("enabled") or 0) == 1:
+        raise HTTPException(400, "Este crédito já está habilitado para uso.")
+    nf = (nf_number or row.get("nf_number") or "").strip()
+    if not nf:
+        raise HTTPException(400, "Informe o número da nota fiscal que gerou este crédito.")
+    conn.execute(
+        "UPDATE hubgov_ledger SET enabled=1, nf_number=? WHERE id=?",
+        (nf, ledger_id),
+    )
+    if row.get("purchase_order_id"):
+        conn.execute(
+            "UPDATE purchase_orders SET generated_nf=? WHERE id=?",
+            (nf, row["purchase_order_id"]),
+        )
+    return db.one(conn.execute("SELECT * FROM hubgov_ledger WHERE id=?", (ledger_id,)))
+
+
+def correct_credit(conn, user: dict, ledger_id: int, amount, nf_number: str | None = None) -> dict:
+    if user["role"] != "administrador":
+        raise HTTPException(403, "Somente o administrador corrige créditos.")
+    row = db.one(conn.execute("SELECT * FROM hubgov_ledger WHERE id=?", (ledger_id,)))
+    if not row:
+        raise HTTPException(404, "Crédito não encontrado.")
+    if row["kind"] != "generated":
+        raise HTTPException(400, "Só é possível corrigir crédito gerado.")
+    try:
+        new_amt = float(amount)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Informe um valor válido.")
+    if new_amt <= 0:
+        raise HTTPException(400, "O crédito gerado deve ser maior que zero.")
+    enabled = int(row.get("enabled") if row.get("enabled") is not None else 1)
+    if enabled == 1:
+        summary = credit_summary(conn)
+        delta = new_amt - float(row["amount"] or 0)
+        if summary["remaining"] + delta < -0.009:
+            raise HTTPException(400, "A correção deixaria o saldo disponível negativo.")
+    nf = (nf_number or "").strip() or row.get("nf_number")
+    note = (row.get("notes") or "").strip()
+    extra = f"Corrigido de R$ {float(row['amount'] or 0):.2f} para R$ {new_amt:.2f}."
+    notes = (note + " " + extra).strip()
+    conn.execute(
+        "UPDATE hubgov_ledger SET amount=?, nf_number=?, notes=? WHERE id=?",
+        (new_amt, nf, notes, ledger_id),
+    )
+    if row.get("purchase_order_id"):
+        conn.execute(
+            "UPDATE purchase_orders SET credit_generated=?, generated_nf=COALESCE(?, generated_nf) WHERE id=?",
+            (new_amt, nf, row["purchase_order_id"]),
+        )
+    return db.one(conn.execute("SELECT * FROM hubgov_ledger WHERE id=?", (ledger_id,)))
+

@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   prorata INTEGER NOT NULL DEFAULT 0,
   credit_used REAL NOT NULL DEFAULT 0,
   credit_nf TEXT,
+  generated_nf TEXT,
   special_condition TEXT,
   special_approved_by TEXT,
   client_id INTEGER REFERENCES clients(id),
@@ -155,6 +156,7 @@ CREATE TABLE IF NOT EXISTS hubgov_ledger (
   amount REAL NOT NULL,
   nf_number TEXT,
   notes TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
   created_by INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

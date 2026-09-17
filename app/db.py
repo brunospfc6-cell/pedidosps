@@ -52,6 +52,8 @@ def init_db():
     add_col("purchase_orders", "payment_terms", "TEXT")
     add_col("purchase_orders", "prorata", "INTEGER NOT NULL DEFAULT 0")
     add_col("hubgov_ledger", "notes", "TEXT")
+    add_col("hubgov_ledger", "enabled", "INTEGER NOT NULL DEFAULT 1")
+    add_col("purchase_orders", "generated_nf", "TEXT")
     conn.commit()
 
 

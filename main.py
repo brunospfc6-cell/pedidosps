@@ -340,13 +340,29 @@ def credits(request: Request):
     summary = services.credit_summary(conn)
     ledger = db.rows(
         conn.execute(
-            """SELECT h.*, po.client_name
+            """SELECT h.*, po.client_name, po.number AS purchase_order_number, po.generated_nf
                FROM hubgov_ledger h
                LEFT JOIN purchase_orders po ON po.id = h.purchase_order_id
                ORDER BY h.id DESC"""
         )
     )
     return {"summary": summary, "ledger": ledger, "available": services.available_credits(conn)}
+
+
+@app.post("/api/credits/{ledger_id}/enable")
+def enable_credit(request: Request, ledger_id: int, payload: dict):
+    u = require_admin(request)
+    with db.tx() as conn:
+        row = services.enable_credit(conn, u, ledger_id, payload.get("nf_number"))
+        return {"ok": True, "credit": row, "summary": services.credit_summary(conn)}
+
+
+@app.post("/api/credits/{ledger_id}/correct")
+def correct_credit(request: Request, ledger_id: int, payload: dict):
+    u = require_admin(request)
+    with db.tx() as conn:
+        row = services.correct_credit(conn, u, ledger_id, payload.get("amount"), payload.get("nf_number"))
+        return {"ok": True, "credit": row, "summary": services.credit_summary(conn)}
 
 
 # ── ODC ───────────────────────────────────────────────

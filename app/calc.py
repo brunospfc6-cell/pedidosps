@@ -45,7 +45,7 @@ def build_memo(calc, dollar_rate, discount_pct, client_type, credit_used):
             f"R$ {_br(calc['credit_generated'])}"
         )
     else:
-        lines.append("Cliente privado — não gera crédito HubGov.")
+        lines.append("Cliente privado — não gera crédito HubGov (pode utilizar saldo habilitado).")
     lines.append(f"Crédito utilizado: R$ {_br(credit_used)}")
     lines.append(f"Valor Final: R$ {_br(calc['net_total_brl'])}")
     if calc["below_minimum"]:

@@ -386,10 +386,10 @@ async function renderOdcForm(id) {
 
   if (!existing) {
     app.innerHTML = shell(`
-      ${head("Nova Ordem de Compra", "Antes de começar, informe o tipo de cliente. Somente pedidos de governo geram créditos HubGov.")}
+      ${head("Nova Ordem de Compra", "Informe o tipo de cliente. Governo gera crédito HubGov; os dois tipos podem utilizar saldo já habilitado.")}
       <div class="grid g2" style="max-width:720px">
-        <button class="choice" id="gov"><h2>Governo</h2><p class="muted">Gera crédito HubGov (≥ 8% sobre lista).</p></button>
-        <button class="choice" id="priv"><h2>Privado</h2><p class="muted">Não gera crédito HubGov.</p></button>
+        <button class="choice" id="gov"><h2>Governo</h2><p class="muted">Gera crédito HubGov (≥ 8% sobre lista) e pode utilizar saldo.</p></button>
+        <button class="choice" id="priv"><h2>Privado</h2><p class="muted">Não gera crédito. Pode utilizar saldo HubGov habilitado.</p></button>
       </div>`);
     bindShell();
     $("#gov").onclick = () => startOdc("governo");
@@ -439,7 +439,7 @@ function drawOdc(o, suppliers, products, credits) {
     ${o.status === "enviado_pars" ? `<div class="banner"><div><strong>Envio à PARS Confirmado</strong><p class="muted">Esta ordem está bloqueada.</p>
       <div class="row-actions" style="margin-top:8px"><a class="btn secondary" href="#/vendas/nova?odc=${o.id}">Pedido de Venda</a>
       <a class="btn outline" href="/api/odc/${o.id}/word">Extrair Word</a></div></div></div>` : ""}
-    <p class="muted">${gov ? "Cliente Governo · HubGov Ativo" : "Cliente Privado · Sem Geração HubGov"}</p>
+    <p class="muted">${gov ? "Cliente Governo · Gera e pode utilizar HubGov" : "Cliente Privado · Não gera crédito · Pode utilizar HubGov"}</p>
     <h1 style="margin:4px 0 18px">${o.id ? "Ordem de Compra " + esc(o.number) : "Nova Ordem de Compra"}</h1>
     <fieldset ${locked ? "disabled" : ""}>
     <form id="odc">
@@ -474,15 +474,15 @@ function drawOdc(o, suppliers, products, credits) {
           ${
             gov
               ? `<div class="field"><label>Percentual de Crédito HubGov Gerado</label><input name="hubgov_credit_pct" type="number" step="0.01" value="${o.hubgov_credit_pct || 8}"></div>
-                 <div class="field"><label>NF que gerou o crédito</label><input name="generated_nf" placeholder="Nota fiscal desta venda" value="${esc(o.generated_nf || o.hubgov?.nf_number || "")}"></div>
-                 <div class="field"><label>Valor do Crédito Utilizado (R$)</label><input name="credit_used" type="number" step="0.01" value="${o.credit_used || 0}"></div>
-                 <div class="field"><label>NF do crédito utilizado</label>
-                   <input name="credit_nf" list="nfs-disp" value="${esc(o.credit_nf || "")}">
-                   <datalist id="nfs-disp">${(credits.available || []).map((c) => `<option value="${esc(c.nf)}">${esc(c.nf)} · ${brl(c.remaining)}</option>`).join("")}</datalist>
-                   <p class="muted" style="margin:4px 0 0">Disponível para uso: ${brl(credits.summary?.remaining || 0)}${(credits.summary?.pending || 0) > 0 ? ` · Pendente de habilitação: ${brl(credits.summary.pending)}` : ""}</p>
-                 </div>`
-              : `<input type="hidden" name="hubgov_credit_pct" value="0"><input type="hidden" name="credit_used" value="0">`
+                 <div class="field"><label>NF que gerou o crédito</label><input name="generated_nf" placeholder="Nota fiscal desta venda" value="${esc(o.generated_nf || o.hubgov?.nf_number || "")}"></div>`
+              : `<input type="hidden" name="hubgov_credit_pct" value="0">`
           }
+          <div class="field"><label>Valor do Crédito Utilizado (R$)</label><input name="credit_used" type="number" step="0.01" value="${o.credit_used || 0}"></div>
+          <div class="field"><label>NF do crédito utilizado</label>
+            <input name="credit_nf" list="nfs-disp" value="${esc(o.credit_nf || "")}">
+            <datalist id="nfs-disp">${(credits.available || []).map((c) => `<option value="${esc(c.nf)}">${esc(c.nf)} · ${brl(c.remaining)}</option>`).join("")}</datalist>
+            <p class="muted" style="margin:4px 0 0">Disponível para uso: ${brl(credits.summary?.remaining || 0)}${(credits.summary?.pending || 0) > 0 ? ` · Pendente de habilitação: ${brl(credits.summary.pending)}` : ""}</p>
+          </div>
         </div>
         <div class="card" style="margin-top:14px;background:var(--accent)"><div class="bd" id="totais"></div></div>
       </div></div>

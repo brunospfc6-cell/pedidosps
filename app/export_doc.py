@@ -228,7 +228,7 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         <p>Câmbio do Dia: R$ {_fmt(order['dollar_rate'], 4)}</p>
         <p>Lista BRL: {_brl(order['list_total_brl'])}</p>
         <p>Desconto {_fmt(order['discount_pct'])}%: − {_brl(order['discount_amount'])}</p>
-        <p>Crédito HubGov gerado ({_fmt(order['hubgov_credit_pct'])}% sobre lista): {_brl(order['credit_generated'])}</p>
+        {"" if order.get("client_type") != "governo" else f"<p>Crédito HubGov gerado ({_fmt(order['hubgov_credit_pct'])}% sobre lista): {_brl(order['credit_generated'])}</p>"}
         <p>Entrega das Licenças: {"Imediato" if order.get("license_delivery") == "imediato" else "Ativação em " + _date(order.get("activation_date"))}</p>
         <p>Prazo de Pagamento: {_esc(_prazo(order))}</p>
       </div>

@@ -163,6 +163,10 @@ CSS = """
   .money .sym { display: inline-block; min-width: 28pt; text-align: center; }
   .money .amt { display: inline-block; min-width: 52pt; text-align: right; }
   .box { border: 1px solid #d4cdc0; padding: 8pt 10pt; margin-top: 6pt; }
+  .valor-compra { border: 2pt solid #1f4e57; padding: 10pt 12pt; margin-top: 10pt; text-align: center; }
+  .valor-compra .lbl { font-size: 9pt; color: #5c6570; text-transform: uppercase; letter-spacing: 0.4pt; margin: 0 0 4pt; }
+  .valor-compra .hero { font-size: 16pt; font-weight: bold; margin: 0 0 4pt; }
+  .valor-compra .ext { margin: 0; }
   .doc-head { width: 100%; border-collapse: collapse; margin: 0 0 14pt; }
   .doc-head td { border: none; padding: 0 0 12pt 0; text-align: center; vertical-align: middle; }
 """
@@ -214,6 +218,7 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
     )
     nf = f" (NF {_esc(order.get('credit_nf'))})" if order.get("credit_nf") else ""
     net = order.get("net_total_brl") or 0
+    after = float(order.get("list_total_brl") or 0) - float(order.get("discount_amount") or 0)
     return f"""
     <div>
       {_header(f"Ordem de Compra {order['number']}", " · ".join(bits))}
@@ -230,15 +235,19 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         <th class="num">Total USD</th><th class="num">Total BRL</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
-      <div class="box">
-        <p>Crédito utilizado{nf}: {_brl(order.get('credit_used'))}</p>
-        <p><strong>Valor Final: {_brl(net)}</strong></p>
-        <p>Valor Final por extenso: {_esc(reais_extenso(net))}</p>
+      <div class="valor-compra">
+        <p class="lbl">Valor da compra (após descontos e créditos)</p>
+        <p class="hero">{_brl(net)}</p>
+        <p class="ext">Por extenso: {_esc(reais_extenso(net))}</p>
       </div>
       <div class="box">
+        <p><strong>Memória de cálculo — preços de tabela</strong></p>
         <p>Câmbio do Dia: R$ {_fmt(order['dollar_rate'], 4)}</p>
-        <p>Lista BRL: {_brl(order['list_total_brl'])}</p>
+        <p>Lista USD: {_usd(order.get('list_total_usd'))}</p>
+        <p>Lista BRL (tabela): {_brl(order['list_total_brl'])}</p>
         <p>Desconto {_fmt(order['discount_pct'])}%: − {_brl(order['discount_amount'])}</p>
+        <p>Após desconto: {_brl(after)}</p>
+        <p>Crédito Pars utilizado{nf}: − {_brl(order.get('credit_used'))}</p>
         {"" if order.get("client_type") != "governo" else f"<p>Crédito Pars gerado ({_fmt(order['hubgov_credit_pct'])}% sobre lista): {_brl(order['credit_generated'])}</p>"}
         <p>Entrega das Licenças: {"Imediato" if order.get("license_delivery") == "imediato" else "Ativação em " + _date(order.get("activation_date"))}</p>
         <p>Prazo de Pagamento: {_esc(_prazo(order))}</p>

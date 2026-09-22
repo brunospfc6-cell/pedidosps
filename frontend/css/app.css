@@ -119,6 +119,29 @@ table.data th.money-h, table.data td.money-cell { text-align: center; vertical-a
 .money-input .sym { min-width: 2.4em; text-align: center; font-weight: 600; color: var(--muted); }
 .money-input input { text-align: center; }
 .btn.rm { min-height: 32px; width: 32px; padding: 0; color: var(--danger); }
+.valor-compra {
+  margin-top: 16px;
+  padding: 18px 20px;
+  background: var(--primary);
+  color: var(--primary-fg);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.valor-compra small { display: block; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; opacity: .85; }
+.valor-compra strong { display: flex; justify-content: center; margin-top: 8px; font-family: var(--display); font-size: 32px; font-weight: 600; }
+.valor-compra .money { color: inherit; }
+.valor-compra .money .sym { color: inherit; opacity: .85; }
+.memo-calc {
+  margin-top: 10px;
+  padding: 14px 16px;
+  background: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.memo-calc h4 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-family: var(--font); font-weight: 600; }
+.memo-calc p { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin: 0; padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent); font-size: 14px; }
+.memo-calc p:last-child { border-bottom: 0; padding-bottom: 0; }
+.memo-calc .money { width: auto; justify-content: flex-end; }
 .mono { font-family: ui-monospace, monospace; font-size: 12px; }
 
 .login { display: grid; min-height: 100vh; }

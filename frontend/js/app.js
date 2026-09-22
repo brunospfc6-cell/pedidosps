@@ -492,7 +492,7 @@ function drawOdc(o, suppliers, products, credits) {
             <p class="muted" style="margin:4px 0 0">Disponível para uso: ${brl(credits.summary?.remaining || 0)}${(credits.summary?.pending || 0) > 0 ? ` · Pendente de habilitação: ${brl(credits.summary.pending)}` : ""}</p>
           </div>
         </div>
-        <div class="card" style="margin-top:14px;background:var(--accent)"><div class="bd" id="totais"></div></div>
+        <div id="totais"></div>
       </div></div>
       <div class="card" style="margin-bottom:16px"><div class="hd"><h3>3. Dados do Cliente</h3></div><div class="bd grid g2">
         <div class="field"><label>CSN</label><input name="client_csn" value="${esc(o.client_csn || "")}"></div>
@@ -716,11 +716,22 @@ function drawOdc(o, suppliers, products, credits) {
           credit_used: Number(form.credit_used?.value || 0),
         },
       });
-      $("#totais").innerHTML = `<p>Lista: ${moneyUSD(t.list_total_usd)} → ${moneyBR(t.list_total_brl)}</p>
-        <p>Desconto: − ${moneyBR(t.discount_amount)}</p>
-        ${gov ? `<p>Crédito Pars gerado: ${moneyBR(t.credit_generated)}</p>` : ""}
-        <p>Crédito utilizado: ${moneyBR(form.credit_used?.value || 0)}</p>
-        <p><strong>Valor Final: ${moneyBR(t.net_total_brl)}</strong></p>`;
+      const used = Number(form.credit_used?.value || 0);
+      $("#totais").innerHTML = `
+        <div class="valor-compra">
+          <small>Valor da compra · após descontos e créditos</small>
+          <strong>${moneyBR(t.net_total_brl)}</strong>
+        </div>
+        <div class="memo-calc">
+          <h4>Memória de cálculo — preços de tabela</h4>
+          <p><span>Lista USD</span><span>${moneyUSD(t.list_total_usd)}</span></p>
+          <p><span>Câmbio do dia</span><span>R$ ${Number(rate).toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span></p>
+          <p><span>Lista BRL (tabela)</span><span>${moneyBR(t.list_total_brl)}</span></p>
+          <p><span>Desconto ${Number(form.discount_pct.value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%</span><span>− ${moneyBR(t.discount_amount)}</span></p>
+          <p><span>Após desconto</span><span>${moneyBR(t.after_discount)}</span></p>
+          <p><span>Crédito Pars utilizado</span><span>− ${moneyBR(used)}</span></p>
+          ${gov ? `<p><span>Crédito Pars gerado</span><span>${moneyBR(t.credit_generated)}</span></p>` : ""}
+        </div>`;
     } catch {}
   }
 }

@@ -25,6 +25,10 @@ def _fmt(v, decimals=2) -> str:
     return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _money(prefix: str, v, decimals=2) -> str:
+    return f'<span class="money"><span class="sym">{prefix}</span><span class="amt">{_fmt(v, decimals)}</span></span>'
+
+
 def _brl(v) -> str:
     return "R$ " + _fmt(v)
 
@@ -154,7 +158,10 @@ CSS = """
   table { width: 100%; border-collapse: collapse; }
   th, td { border-bottom: 1px solid #e4ddd0; padding: 5pt 4pt; text-align: left; }
   th { font-weight: bold; color: #5c6570; }
-  .num { text-align: right; }
+  .num { text-align: center; }
+  .money { display: inline-block; width: 100%; text-align: center; white-space: nowrap; }
+  .money .sym { display: inline-block; min-width: 28pt; text-align: center; }
+  .money .amt { display: inline-block; min-width: 52pt; text-align: right; }
   .box { border: 1px solid #d4cdc0; padding: 8pt 10pt; margin-top: 6pt; }
   .doc-head { width: 100%; border-collapse: collapse; margin: 0 0 14pt; }
   .doc-head td { border: none; padding: 0 0 12pt 0; text-align: center; vertical-align: middle; }
@@ -189,8 +196,11 @@ def _signature() -> str:
 def odc_html(order: dict, items: list[dict], include_status: bool = False) -> str:
     rows = "".join(
         f"<tr><td>{_esc(it['sku'])}</td><td>{_esc(it['product_name'])}</td>"
-        f"<td class='num'>{_qty(it['qty'])}</td><td class='num'>{_usd(it['list_price_usd'])}</td>"
-        f"<td class='num'>{_usd(it['line_total_usd'])}</td><td class='num'>{_brl(it['line_total_brl'])}</td></tr>"
+        f"<td class='num'>{_qty(it['qty'])}</td>"
+        f"<td class='num'>{_money('US$', it['list_price_usd'])}</td>"
+        f"<td class='num'>{_money('R$', (it.get('list_price_usd') or 0) * float(order.get('dollar_rate') or 0))}</td>"
+        f"<td class='num'>{_money('US$', it['line_total_usd'])}</td>"
+        f"<td class='num'>{_money('R$', it['line_total_brl'])}</td></tr>"
         for it in items
     )
     bits = [f"Data {_date(order['order_date'])}"]
@@ -216,7 +226,8 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
       <h2>2. Produtos Autodesk</h2>
       <table>
         <thead><tr><th>SKU</th><th>Produto</th><th class="num">Qtd</th>
-        <th class="num">Unit. USD</th><th class="num">Total USD</th><th class="num">Total BRL</th></tr></thead>
+        <th class="num">Unit. USD</th><th class="num">Unit. R$</th>
+        <th class="num">Total USD</th><th class="num">Total BRL</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
       <div class="box">
@@ -228,7 +239,7 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         <p>Câmbio do Dia: R$ {_fmt(order['dollar_rate'], 4)}</p>
         <p>Lista BRL: {_brl(order['list_total_brl'])}</p>
         <p>Desconto {_fmt(order['discount_pct'])}%: − {_brl(order['discount_amount'])}</p>
-        {"" if order.get("client_type") != "governo" else f"<p>Crédito HubGov gerado ({_fmt(order['hubgov_credit_pct'])}% sobre lista): {_brl(order['credit_generated'])}</p>"}
+        {"" if order.get("client_type") != "governo" else f"<p>Crédito Pars gerado ({_fmt(order['hubgov_credit_pct'])}% sobre lista): {_brl(order['credit_generated'])}</p>"}
         <p>Entrega das Licenças: {"Imediato" if order.get("license_delivery") == "imediato" else "Ativação em " + _date(order.get("activation_date"))}</p>
         <p>Prazo de Pagamento: {_esc(_prazo(order))}</p>
       </div>
@@ -256,8 +267,8 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
 def sales_html(order: dict, items: list[dict]) -> str:
     rows = "".join(
         f"<tr><td>{_esc(it['sku'])}</td><td>{_esc(it['product_name'])}</td>"
-        f"<td class='num'>{_qty(it['qty'])}</td><td class='num'>{_brl(it['unit_price_brl'])}</td>"
-        f"<td class='num'>{_brl(it['line_total_brl'])}</td></tr>"
+        f"<td class='num'>{_qty(it['qty'])}</td><td class='num'>{_money('R$', it['unit_price_brl'])}</td>"
+        f"<td class='num'>{_money('R$', it['line_total_brl'])}</td></tr>"
         for it in items
     )
     extra = (

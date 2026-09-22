@@ -41,11 +41,11 @@ def build_memo(calc, dollar_rate, discount_pct, client_type, credit_used):
     ]
     if client_type == "governo":
         lines.append(
-            f"Crédito HubGov gerado ({_br(calc['hubgov_credit_pct'] or DEFAULT_HUBGOV_PCT)}% sobre lista): "
+            f"Crédito Pars gerado ({_br(calc['hubgov_credit_pct'] or DEFAULT_HUBGOV_PCT)}% sobre lista): "
             f"R$ {_br(calc['credit_generated'])}"
         )
     else:
-        lines.append("Cliente privado — não gera crédito HubGov (pode utilizar saldo habilitado).")
+        lines.append("Cliente privado — não gera crédito Pars (pode utilizar saldo habilitado).")
     lines.append(f"Crédito utilizado: R$ {_br(credit_used)}")
     lines.append(f"Valor Final: R$ {_br(calc['net_total_brl'])}")
     if calc["below_minimum"]:

@@ -75,12 +75,12 @@ def upsert_client(conn, user_id: int, data: dict) -> int:
 
 def validate_odc(data: dict, calc: dict, finalize: bool, conn=None):
     if finalize and calc["below_minimum"]:
-        raise HTTPException(400, f"O valor líquido não pode ser inferior a R$ {MIN_NET_BRL:.2f} ao utilizar crédito HubGov.")
+        raise HTTPException(400, f"O valor líquido não pode ser inferior a R$ {MIN_NET_BRL:.2f} ao utilizar crédito Pars.")
     if data.get("client_type") == "governo" and finalize and float(data.get("hubgov_credit_pct") or 0) < 8:
-        raise HTTPException(400, "Pedidos de governo devem gerar no mínimo 8% de crédito HubGov.")
+        raise HTTPException(400, "Pedidos de governo devem gerar no mínimo 8% de crédito Pars.")
     used = float(data.get("credit_used") or 0)
     if used > 0 and not (data.get("credit_nf") or "").strip():
-        raise HTTPException(400, "Informe a nota fiscal que gerou o crédito HubGov utilizado.")
+        raise HTTPException(400, "Informe a nota fiscal que gerou o crédito Pars utilizado.")
     if used > 0 and conn is not None:
         remaining = credit_summary(conn)["remaining"]
         # when editing an existing ODC, its previous use is already in the ledger until we replace it
@@ -173,6 +173,7 @@ def save_odc(conn, user: dict, data: dict) -> dict:
     terms, days = normalize_terms(data)
     prorata = flag_prorata(data)
     generated_nf = (data.get("generated_nf") or "").strip() or None
+    old_rate = None
 
     if odc_id:
         existing = db.one(conn.execute("SELECT * FROM purchase_orders WHERE id = ?", (odc_id,)))
@@ -182,6 +183,7 @@ def save_odc(conn, user: dict, data: dict) -> dict:
             raise HTTPException(400, "Esta ordem não pode mais ser alterada.")
         if user["role"] == "vendedor" and existing["created_by"] != user["id"]:
             raise HTTPException(403, "Sem permissão.")
+        old_rate = existing.get("dollar_rate")
         conn.execute(
             """UPDATE purchase_orders SET
                order_date=?, supplier_id=?, client_type=?, sale_kind=?, status=?,
@@ -271,7 +273,61 @@ def save_odc(conn, user: dict, data: dict) -> dict:
                VALUES (?,?, 'used', ?, ?, 1, ?)""",
             (client_id, odc_id, data.get("credit_used") or 0, data.get("credit_nf"), user["id"]),
         )
-    return odc_with_items(conn, odc_id)
+    order = odc_with_items(conn, odc_id)
+    sync_sales_from_odc(conn, order, old_rate)
+    return order
+
+
+def sync_sales_from_odc(conn, odc: dict, old_rate=None):
+    """Update linked sales memo/credits. Recalc unit only when it still followed the previous ODC dollar."""
+    if not odc or not odc.get("id"):
+        return
+    rate = float(odc.get("dollar_rate") or 0)
+    prev = float(old_rate) if old_rate not in (None, "") else None
+    calc = compute_odc(
+        odc.get("items") or [],
+        odc.get("dollar_rate"),
+        odc.get("discount_pct"),
+        odc.get("client_type"),
+        odc.get("hubgov_credit_pct"),
+        odc.get("credit_used"),
+    )
+    memo = build_memo(calc, odc.get("dollar_rate"), odc.get("discount_pct"), odc.get("client_type"), odc.get("credit_used"))
+    sales = db.rows(
+        conn.execute(
+            "SELECT * FROM sales_orders WHERE purchase_order_id=? AND status!='cancelado'",
+            (odc["id"],),
+        )
+    )
+    src = {((it.get("sku") or ""), (it.get("product_name") or "")): it for it in (odc.get("items") or [])}
+    for so in sales:
+        rows = db.rows(
+            conn.execute("SELECT * FROM sales_order_items WHERE sales_order_id=?", (so["id"],))
+        )
+        total = 0.0
+        for sit in rows:
+            key = ((sit.get("sku") or ""), (sit.get("product_name") or ""))
+            it = src.get(key) or next(
+                (x for x in (odc.get("items") or []) if (x.get("sku") or "") == (sit.get("sku") or "")),
+                None,
+            )
+            qty = float(sit.get("qty") or 0)
+            unit = float(sit.get("unit_price_brl") or 0)
+            if it and prev is not None:
+                catalog_old = float(it.get("list_price_usd") or 0) * prev
+                if abs(unit - catalog_old) < 0.02:
+                    unit = float(it.get("list_price_usd") or 0) * rate
+                    conn.execute(
+                        "UPDATE sales_order_items SET unit_price_brl=?, line_total_brl=? WHERE id=?",
+                        (unit, unit * qty, sit["id"]),
+                    )
+            total += unit * qty
+        conn.execute(
+            """UPDATE sales_orders SET calculation_memo=?, credit_used=?, credit_generated=?,
+               sale_total_brl=?, updated_at=datetime('now') WHERE id=?""",
+            (memo, odc.get("credit_used") or 0, odc.get("credit_generated") or 0, total, so["id"]),
+        )
+
 
 
 def mark_sent(conn, user: dict, odc_id: int):
@@ -322,7 +378,7 @@ def save_sales(conn, user: dict, data: dict) -> dict:
         terms = (po.get("payment_terms") or "").strip() or (f"{days} dias" if days else "")
     prorata = flag_prorata(data)
     sale_total = sum(float(it["qty"]) * float(it["unit_price_brl"]) for it in items)
-    memo = data.get("calculation_memo") or build_memo(
+    memo = build_memo(
         compute_odc(
             po["items"], po["dollar_rate"], po["discount_pct"], po["client_type"],
             po["hubgov_credit_pct"], po["credit_used"],

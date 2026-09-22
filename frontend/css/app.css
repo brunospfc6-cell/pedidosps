@@ -103,7 +103,22 @@ table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.data th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 10px 16px; border-bottom: 1px solid var(--border); }
 table.data td { padding: 10px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 table.data tr:last-child td { border-bottom: 0; }
-.num { text-align: right; font-variant-numeric: tabular-nums; }
+.num { text-align: center; font-variant-numeric: tabular-nums; }
+.money {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.money .sym { min-width: 2.4em; text-align: center; font-weight: 600; color: var(--muted); }
+.money .amt { text-align: right; min-width: 5.2em; }
+table.data th.money-h, table.data td.money-cell { text-align: center; vertical-align: middle; }
+.money-input { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.money-input .sym { min-width: 2.4em; text-align: center; font-weight: 600; color: var(--muted); }
+.money-input input { text-align: center; }
+.btn.rm { min-height: 32px; width: 32px; padding: 0; color: var(--danger); }
 .mono { font-family: ui-monospace, monospace; font-size: 12px; }
 
 .login { display: grid; min-height: 100vh; }

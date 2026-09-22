@@ -34,7 +34,7 @@ COMPANY = {
     "addressLine1": "SRTV/Sul Quadra 701, Palácio do Rádio I, N° 130 SL 209",
     "addressLine2": "CEP 70340-901 — Brasília/DF",
     "cnpj": "03.620.200/0001-35",
-    "ie": "0731060800113",
+    "ie": "07.310.608/001-13",
     "phone": "61-3202.2666",
     "tagline": "Revenda Autorizada Autodesk",
 }

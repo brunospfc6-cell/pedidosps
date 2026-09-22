@@ -20,6 +20,14 @@ function brl(v) {
 function usd(v) {
   return Number(v || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
+function moneyBR(v) {
+  const n = Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `<span class="money"><span class="sym">R$</span><span class="amt">${n}</span></span>`;
+}
+function moneyUSD(v) {
+  const n = Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `<span class="money"><span class="sym">US$</span><span class="amt">${n}</span></span>`;
+}
 function dateBR(iso) {
   if (!iso) return "—";
   const [y, m, d] = String(iso).slice(0, 10).split("-");
@@ -107,7 +115,7 @@ function nav() {
     ["#/odc", "Ordens de Compra"],
     ["#/vendas", "Pedidos de Venda"],
     ["#/clientes", "Clientes"],
-    ["#/creditos", "HubGov"],
+    ["#/creditos", "Crédito Pars"],
   ];
   if (me.role === "administrador") {
     items.push(["#/produtos", "Produtos e Preços"], ["#/atualizacoes", "Atualizações"], ["#/usuarios", "Usuários"]);
@@ -205,7 +213,7 @@ function renderLogin() {
       </div>
       <div>
         <h2>Controle de Compras<br>e Vendas Autodesk.</h2>
-        <p class="muted" style="color:#8b959e;margin-top:12px">Ordens de Compra, Pedidos de Venda, créditos HubGov e gestão comercial.</p>
+        <p class="muted" style="color:#8b959e;margin-top:12px">Ordens de Compra, Pedidos de Venda, créditos Pars e gestão comercial.</p>
       </div>
       <p style="font-size:12px;color:#8b959e">Pro-Systems Informática LTDA · CNPJ 03.620.200/0001-35 · Brasília/DF</p>
     </section>
@@ -247,12 +255,12 @@ async function renderHome() {
     )
     .join("");
   app.innerHTML = shell(`
-    ${head("Painel", "Acompanhe ordens de compra, envios à PARS e o saldo HubGov.", `<a class="btn primary" href="#/odc/nova">Nova Ordem de Compra</a>`)}
+    ${head("Painel", "Acompanhe ordens de compra, envios à PARS e o saldo de Crédito Pars.", `<a class="btn primary" href="#/odc/nova">Nova Ordem de Compra</a>`)}
     <div class="grid g4">
       <div class="card stat"><small>Ordens de Compra</small><strong>${d.odc_count}</strong></div>
       <div class="card stat"><small>Pendente PARS</small><strong>${d.pending_pars}</strong></div>
       <div class="card stat"><small>Vendas</small><strong>${brl(d.sales_total)}</strong></div>
-      <div class="card stat"><small>Saldo HubGov</small><strong>${brl(d.credits.remaining)}</strong></div>
+      <div class="card stat"><small>Saldo Crédito Pars</small><strong>${brl(d.credits.remaining)}</strong></div>
     </div>
     <h2 style="margin:28px 0 12px;font-size:22px">Pedidos Recentes</h2>
     <div class="card"><div class="bd" style="padding:0">
@@ -386,10 +394,10 @@ async function renderOdcForm(id) {
 
   if (!existing) {
     app.innerHTML = shell(`
-      ${head("Nova Ordem de Compra", "Informe o tipo de cliente. Governo gera crédito HubGov; os dois tipos podem utilizar saldo já habilitado.")}
+      ${head("Nova Ordem de Compra", "Informe o tipo de cliente. Governo gera crédito Pars; os dois tipos podem utilizar saldo já habilitado.")}
       <div class="grid g2" style="max-width:720px">
-        <button class="choice" id="gov"><h2>Governo</h2><p class="muted">Gera crédito HubGov (≥ 8% sobre lista) e pode utilizar saldo.</p></button>
-        <button class="choice" id="priv"><h2>Privado</h2><p class="muted">Não gera crédito. Pode utilizar saldo HubGov habilitado.</p></button>
+        <button class="choice" id="gov"><h2>Governo</h2><p class="muted">Gera crédito Pars (≥ 8% sobre lista) e pode utilizar saldo.</p></button>
+        <button class="choice" id="priv"><h2>Privado</h2><p class="muted">Não gera crédito. Pode utilizar saldo Pars habilitado.</p></button>
       </div>`);
     bindShell();
     $("#gov").onclick = () => startOdc("governo");
@@ -439,7 +447,7 @@ function drawOdc(o, suppliers, products, credits) {
     ${o.status === "enviado_pars" ? `<div class="banner"><div><strong>Envio à PARS Confirmado</strong><p class="muted">Esta ordem está bloqueada.</p>
       <div class="row-actions" style="margin-top:8px"><a class="btn secondary" href="#/vendas/nova?odc=${o.id}">Pedido de Venda</a>
       <a class="btn outline" href="/api/odc/${o.id}/word">Extrair Word</a></div></div></div>` : ""}
-    <p class="muted">${gov ? "Cliente Governo · Gera e pode utilizar HubGov" : "Cliente Privado · Não gera crédito · Pode utilizar HubGov"}</p>
+    <p class="muted">${gov ? "Cliente Governo · Gera e pode utilizar Crédito Pars" : "Cliente Privado · Não gera crédito · Pode utilizar Crédito Pars"}</p>
     <h1 style="margin:4px 0 18px">${o.id ? "Ordem de Compra " + esc(o.number) : "Nova Ordem de Compra"}</h1>
     <fieldset ${locked ? "disabled" : ""}>
     <form id="odc">
@@ -459,8 +467,8 @@ function drawOdc(o, suppliers, products, credits) {
         <label class="btn outline sm" style="cursor:pointer"><input type="checkbox" name="prorata" id="prorata" ${isProrata(o) ? "checked" : ""} style="width:auto;margin:0"> Pro-rata</label>
       </div>
       <div class="bd">
-        <table class="data" id="items"><thead><tr><th>Produto</th><th>Qtd</th><th>Unit. USD</th><th></th></tr></thead>
-        <tbody>${items.map((it, i) => itemRow(it, i, isProrata(o))).join("")}</tbody></table>
+        <table class="data" id="items"><thead><tr><th>Produto</th><th>Qtd</th><th class="money-h">Unit. USD</th><th class="money-h">Unit. R$</th><th></th></tr></thead>
+        <tbody>${items.map((it) => itemRow(it, isProrata(o), Number(o.dollar_rate || 0), !locked)).join("")}</tbody></table>
         ${locked ? "" : `<button type="button" class="btn outline" id="add">Adicionar Produto</button>`}
         <div class="grid g3" style="margin-top:16px">
           <div class="field"><label>Dólar do Dia (R$)</label><input name="dollar_rate" type="number" step="0.0001" value="${o.dollar_rate || ""}"></div>
@@ -473,7 +481,7 @@ function drawOdc(o, suppliers, products, credits) {
           <div class="field"><label>Percentual de Desconto</label><input name="discount_pct" type="number" step="0.01" value="${o.discount_pct || 0}"></div>
           ${
             gov
-              ? `<div class="field"><label>Percentual de Crédito HubGov Gerado</label><input name="hubgov_credit_pct" type="number" step="0.01" value="${o.hubgov_credit_pct || 8}"></div>
+              ? `<div class="field"><label>Percentual de Crédito Pars Gerado</label><input name="hubgov_credit_pct" type="number" step="0.01" value="${o.hubgov_credit_pct || 8}"></div>
                  <div class="field"><label>NF que gerou o crédito</label><input name="generated_nf" placeholder="Nota fiscal desta venda" value="${esc(o.generated_nf || o.hubgov?.nf_number || "")}"></div>`
               : `<input type="hidden" name="hubgov_credit_pct" value="0">`
           }
@@ -505,7 +513,7 @@ function drawOdc(o, suppliers, products, credits) {
         o.client_type
           ? `<div class="card" style="margin-bottom:16px"><div class="hd"><h3>Faturamento e Cobrança</h3></div>
         <div class="bd muted"><p style="color:var(--fg);font-weight:600;margin:0">Pro-Systems Informática LTDA</p>
-        <p>SRTV/Sul Quadra 701, Palácio do Rádio I, N° 130 SL 209<br>CEP 70340-901 — Brasília/DF<br>CNPJ: 03.620.200/0001-35 · IE: 0731060800113 · Fone: 61-3202.2666</p></div></div>`
+        <p>SRTV/Sul Quadra 701, Palácio do Rádio I, N° 130 SL 209<br>CEP 70340-901 — Brasília/DF<br>CNPJ: 03.620.200/0001-35 · IE: 07.310.608/001-13 · Fone: 61-3202.2666</p></div></div>`
           : ""
       }
       <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Assinatura</h3></div>
@@ -570,9 +578,14 @@ function drawOdc(o, suppliers, products, credits) {
   };
   $("#add")?.addEventListener("click", () => {
     const tb = $("#items tbody");
-    const i = tb.children.length;
-    tb.insertAdjacentHTML("beforeend", itemRow({}, i, $("#prorata")?.checked));
+    tb.insertAdjacentHTML("beforeend", itemRow({}, $("#prorata")?.checked, Number(form.dollar_rate.value || 0), true));
     attachPickers(tb.lastElementChild, products, form.sale_kind.value);
+  });
+  $("#items")?.addEventListener("click", (e) => {
+    const b = e.target.closest(".rm");
+    if (!b) return;
+    b.closest("tr")?.remove();
+    refreshTotals();
   });
   form.addEventListener("picked", (e) => {
     const wrap = e.target.closest(".picker");
@@ -580,6 +593,9 @@ function drawOdc(o, suppliers, products, credits) {
     const price = Number(wrap.dataset.price || 0);
     const inp = $(".unit-usd", tr);
     if (inp) inp.value = price;
+    const rate = Number(form.dollar_rate.value || 0);
+    const brlEl = $(".unit-brl", tr);
+    if (brlEl) brlEl.innerHTML = moneyBR(price * rate);
     refreshTotals();
   });
   form.client_csn?.addEventListener("blur", async () => {
@@ -678,6 +694,12 @@ function drawOdc(o, suppliers, products, credits) {
   $("#prorata")?.addEventListener("change", syncProrata);
   syncProrata();
   async function refreshTotals() {
+    const rate = Number(form.dollar_rate.value || 0);
+    $$("#items tbody tr").forEach((tr) => {
+      const u = Number($(".unit-usd", tr)?.value || 0);
+      const el = $(".unit-brl", tr);
+      if (el) el.innerHTML = moneyBR(u * rate);
+    });
     const items = $$("#items tbody tr").map((tr) => ({
       qty: Number($(".qty", tr)?.value || 1),
       list_price_usd: Number($(".unit-usd", tr)?.value || $(".picker", tr)?.dataset.price || 0),
@@ -687,24 +709,24 @@ function drawOdc(o, suppliers, products, credits) {
         method: "POST",
         body: {
           items,
-          dollar_rate: Number(form.dollar_rate.value || 0),
+          dollar_rate: rate,
           discount_pct: Number(form.discount_pct.value || 0),
           client_type: o.client_type,
           hubgov_credit_pct: Number(form.hubgov_credit_pct?.value || 0),
           credit_used: Number(form.credit_used?.value || 0),
         },
       });
-      $("#totais").innerHTML = `<p>Lista: ${usd(t.list_total_usd)} → ${brl(t.list_total_brl)}</p>
-        <p>Desconto: − ${brl(t.discount_amount)}</p>
-        ${gov ? `<p>Crédito HubGov gerado: ${brl(t.credit_generated)}</p>` : ""}
-        <p>Crédito utilizado: ${brl(form.credit_used?.value || 0)}</p>
-        <p><strong>Valor Final: ${brl(t.net_total_brl)}</strong></p>`;
+      $("#totais").innerHTML = `<p>Lista: ${moneyUSD(t.list_total_usd)} → ${moneyBR(t.list_total_brl)}</p>
+        <p>Desconto: − ${moneyBR(t.discount_amount)}</p>
+        ${gov ? `<p>Crédito Pars gerado: ${moneyBR(t.credit_generated)}</p>` : ""}
+        <p>Crédito utilizado: ${moneyBR(form.credit_used?.value || 0)}</p>
+        <p><strong>Valor Final: ${moneyBR(t.net_total_brl)}</strong></p>`;
     } catch {}
   }
 }
 
-function itemRow(it = {}, i, prorata = false) {
-  const price = it.list_price_usd || "";
+function itemRow(it = {}, prorata = false, rate = 0, canRemove = true) {
+  const price = Number(it.list_price_usd || 0);
   return `<tr>
     <td><div class="picker" data-sku="${esc(it.sku || "")}" data-name="${esc(it.product_name || "")}" data-price="${it.list_price_usd || 0}" data-catalog-price="${it.list_price_usd || 0}">
       <input class="pq" placeholder="Buscar SKU, produto ou linha…" autocomplete="off" value="${esc(it.product_name || it.sku || "")}">
@@ -712,8 +734,9 @@ function itemRow(it = {}, i, prorata = false) {
       ${it.sku ? `<p class="mono muted">${esc(it.sku)}</p>` : ""}
     </div></td>
     <td style="width:90px"><input class="qty" type="number" min="1" value="${it.qty || 1}"></td>
-    <td style="width:130px"><input class="unit-usd" type="number" step="0.01" min="0" value="${price}" ${prorata ? "" : "disabled"}></td>
-    <td></td>
+    <td class="money-cell" style="width:160px"><div class="money-input"><span class="sym">US$</span><input class="unit-usd" type="number" step="0.01" min="0" value="${it.list_price_usd || ""}" ${prorata ? "" : "disabled"}></div></td>
+    <td class="money-cell unit-brl">${moneyBR(price * Number(rate || 0))}</td>
+    <td style="width:44px">${canRemove ? `<button type="button" class="btn ghost sm rm" title="Remover produto">×</button>` : ""}</td>
   </tr>`;
 }
 
@@ -763,12 +786,23 @@ async function renderSalesForm(unused, id) {
     return;
   }
   const locked = existing?.status === "cancelado" || odc.status === "cancelado";
-  const items = (existing?.items || odc.items || []).map((it) => ({
-    sku: it.sku,
-    product_name: it.product_name,
-    qty: it.qty,
-    unit_price_brl: it.unit_price_brl || (it.qty ? (it.line_total_brl || 0) / it.qty : 0),
-  }));
+  const rate = Number(odc.dollar_rate || 0);
+  const odcBySku = Object.fromEntries((odc.items || []).map((it) => [it.sku || it.product_name, it]));
+  const items = (existing?.items || odc.items || []).map((it) => {
+    const src = odcBySku[it.sku] || odcBySku[it.product_name];
+    const fromOdc = src ? Number(src.list_price_usd || 0) * rate : 0;
+    const stored = it.unit_price_brl || (it.qty ? (it.line_total_brl || 0) / it.qty : 0);
+    return {
+      sku: it.sku,
+      product_name: it.product_name,
+      qty: it.qty,
+      unit_price_brl: existing ? stored || fromOdc : fromOdc || stored,
+    };
+  });
+  const liveMemo =
+    `Lista USD ${usd(odc.list_total_usd)}\nCâmbio R$ ${rate.toFixed(4)}\nLíquido ${brl(odc.net_total_brl)}` +
+    (odc.credit_used ? `\nCrédito utilizado ${brl(odc.credit_used)}` : "") +
+    (odc.credit_generated ? `\nCrédito Pars gerado ${brl(odc.credit_generated)}` : "");
   app.innerHTML = shell(`
     ${existing ? badge(existing.status) : ""}
     <p class="muted">A partir da ${esc(odc.number)}</p>
@@ -782,10 +816,7 @@ async function renderSalesForm(unused, id) {
         <p class="muted">${esc(odc.client_document)}</p>
       </div></div>
       <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Memória de Cálculo</h3></div>
-        <div class="bd"><pre style="white-space:pre-wrap;font-family:inherit;margin:0">${esc(
-          existing?.calculation_memo ||
-            `Lista USD ${usd(odc.list_total_usd)}\nCâmbio R$ ${Number(odc.dollar_rate).toFixed(4)}\nLíquido ${brl(odc.net_total_brl)}`,
-        )}</pre></div></div>
+        <div class="bd"><pre style="white-space:pre-wrap;font-family:inherit;margin:0">${esc(liveMemo)}</pre></div></div>
       <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Dados da Venda</h3></div><div class="bd grid g2">
         <div class="field"><label>Tipo de Cliente</label><select name="client_type">
           <option value="governo" ${odc.client_type === "governo" ? "selected" : ""}>Governo</option>
@@ -811,7 +842,7 @@ async function renderSalesForm(unused, id) {
         <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
           <label class="btn outline sm" style="cursor:pointer"><input type="checkbox" name="prorata" id="pv-prorata" ${isProrata(existing) ? "checked" : ""} style="width:auto;margin:0"> Pro-rata</label>
         </div>
-        <table class="data"><thead><tr><th>Produto</th><th>Qtd</th><th>Valor Unitário (R$)</th><th>Total</th></tr></thead>
+        <table class="data"><thead><tr><th>Produto</th><th>Qtd</th><th class="money-h">Valor Unitário (R$)</th><th class="money-h">Total</th></tr></thead>
         <tbody id="sit">${items
           .map(
             (it, i) => `<tr>
@@ -819,13 +850,13 @@ async function renderSalesForm(unused, id) {
               <input type="hidden" class="pname" value="${esc(it.product_name)}"><input type="hidden" class="sku" value="${esc(it.sku)}">
               <input type="hidden" class="list-unit" value="${it.unit_price_brl || 0}"></td>
             <td><input class="qty" type="number" value="${it.qty}"></td>
-            <td><input class="unit" type="number" step="0.01" value="${it.unit_price_brl || ""}" ${isProrata(existing) ? "" : "disabled"}></td>
-            <td class="line">${brl((it.qty || 0) * (it.unit_price_brl || 0))}</td>
+            <td class="money-cell"><div class="money-input"><span class="sym">R$</span><input class="unit" type="number" step="0.01" min="0" value="${it.unit_price_brl || ""}"></div></td>
+            <td class="money-cell line">${moneyBR((it.qty || 0) * (it.unit_price_brl || 0))}</td>
           </tr>`,
           )
           .join("")}</tbody></table>
-        <p style="margin-top:12px">Crédito utilizado: ${brl(odc.credit_used)} · Crédito gerado: ${brl(odc.credit_generated)}</p>
-        <p><strong>Total da Venda: <span id="stotal">${brl(existing?.sale_total_brl || 0)}</span></strong></p>
+        <p style="margin-top:12px">Crédito utilizado: ${moneyBR(odc.credit_used)} · Crédito gerado: ${moneyBR(odc.credit_generated)}</p>
+        <p><strong>Total da Venda: <span id="stotal">${moneyBR(items.reduce((s, it) => s + (it.qty || 0) * (it.unit_price_brl || 0), 0))}</span></strong></p>
       </div></div>
       <div class="card"><div class="hd"><h3>Assinatura</h3></div>
         <div class="bd"><div class="sig"><div class="id">Diretor<br>Pro-Systems Informática Ltda.<br>CNPJ 03.620.200/0001-35</div></div></div></div>
@@ -852,19 +883,13 @@ async function renderSalesForm(unused, id) {
       const q = Number($(".qty", tr).value || 0);
       const u = Number($(".unit", tr).value || 0);
       tot += q * u;
-      $(".line", tr).textContent = brl(q * u);
+      const line = $(".line", tr);
+      if (line) line.innerHTML = moneyBR(q * u);
     });
-    $("#stotal").textContent = brl(tot);
+    const st = $("#stotal");
+    if (st) st.innerHTML = moneyBR(tot);
   });
   function syncPvProrata() {
-    const on = $("#pv-prorata")?.checked;
-    $$("#sit .unit").forEach((inp) => {
-      inp.disabled = !on;
-      if (!on) {
-        const orig = inp.closest("tr")?.querySelector(".list-unit")?.value;
-        if (orig) inp.value = orig;
-      }
-    });
     form.dispatchEvent(new Event("input"));
   }
   $("#pv-prorata")?.addEventListener("change", syncPvProrata);
@@ -961,7 +986,7 @@ async function renderClients() {
 async function renderCredits() {
   const d = await api("/api/credits");
   const admin = me.role === "administrador";
-  app.innerHTML = shell(`${head("Créditos HubGov", "Crédito gerado em pedido de governo só fica disponível depois que o administrador habilitar. O saldo inicial de R$ 194.372,95 já está habilitado.")}
+  app.innerHTML = shell(`${head("Créditos Pars", "Crédito gerado em pedido de governo só fica disponível depois que o administrador habilitar. O saldo inicial de R$ 194.372,95 já está habilitado.")}
     <div class="grid g4" style="margin-bottom:16px">
       <div class="card stat"><small>Gerado</small><strong>${brl(d.summary.generated)}</strong></div>
       <div class="card stat"><small>Pendente</small><strong>${brl(d.summary.pending || 0)}</strong></div>

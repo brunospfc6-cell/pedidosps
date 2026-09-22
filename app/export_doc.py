@@ -256,11 +256,11 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
           </tr>
           <tr>
             <td></td><td colspan="3" class="sum-lab">Desconto</td>
-            <td class="num">{_money('− R$', disc_amt)}</td>
+            <td class="num">{_money('R$', -disc_amt)}</td>
           </tr>
           <tr>
             <td></td><td colspan="3" class="sum-lab">Crédito Pars usado{nf}</td>
-            <td class="num">{_money('− R$', credit)}</td>
+            <td class="num">{_money('R$', -credit)}</td>
           </tr>
           <tr>
             <td></td><td colspan="3" class="sum-lab"><strong>Valor Total</strong></td>
@@ -288,6 +288,13 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         <p>{_esc(COMPANY['addressLine2'])}</p>
         <p>CNPJ: {COMPANY['cnpj']} · Inscrição Estadual: {COMPANY['ie']}</p>
         <p>Fone: {COMPANY['phone']}</p>
+      </div>
+      <h2>Observações</h2>
+      <div class="box">
+        {f"<p>{_esc(order.get('notes'))}</p>" if (order.get("notes") or "").strip() else ""}
+        <p><strong>Memória de cálculo</strong></p>
+        <p>Dólar do dia: R$ {_fmt(rate, 4)}</p>
+        <p>Valor do pedido em dólar: {_usd(order.get("list_total_usd"))}</p>
       </div>
       {_signature()}
     </div>

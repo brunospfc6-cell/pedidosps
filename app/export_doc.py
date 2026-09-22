@@ -198,15 +198,32 @@ def _signature() -> str:
 
 
 def odc_html(order: dict, items: list[dict], include_status: bool = False) -> str:
-    rows = "".join(
-        f"<tr><td>{_esc(it['sku'])}</td><td>{_esc(it['product_name'])}</td>"
-        f"<td class='num'>{_qty(it['qty'])}</td>"
-        f"<td class='num'>{_money('US$', it['list_price_usd'])}</td>"
-        f"<td class='num'>{_money('R$', (it.get('list_price_usd') or 0) * float(order.get('dollar_rate') or 0))}</td>"
-        f"<td class='num'>{_money('US$', it['line_total_usd'])}</td>"
-        f"<td class='num'>{_money('R$', it['line_total_brl'])}</td></tr>"
-        for it in items
-    )
+    rate = float(order.get("dollar_rate") or 0)
+    list_brl = float(order.get("list_total_brl") or 0)
+    disc_amt = float(order.get("discount_amount") or 0)
+    credit = float(order.get("credit_used") or 0)
+    after = list_brl - disc_amt
+    net = float(order.get("net_total_brl") or 0)
+    rows = []
+    for i, it in enumerate(items):
+        qty = float(it.get("qty") or 0)
+        unit_brl = float(it.get("list_price_usd") or 0) * rate
+        total_brl = float(it.get("line_total_brl") or (qty * unit_brl))
+        share = (total_brl / list_brl) if list_brl else 0.0
+        line_disc = disc_amt * share
+        line_cred = credit * share
+        rows.append(
+            "<tr>"
+            f"<td>{_esc(it['sku'])}</td><td>{_esc(it['product_name'])}</td>"
+            f"<td class='num'>{_qty(qty)}</td>"
+            f"<td class='num'>{_money('R$', unit_brl)}</td>"
+            f"<td class='num'>{_money('R$', total_brl)}</td>"
+            f"<td class='num'>{_money('R$', line_disc)}</td>"
+            f"<td class='num'>{_money('R$', line_cred)}</td>"
+            "</tr>"
+        )
+    body = "".join(rows)
+    tot_qty = sum(float(it.get("qty") or 0) for it in items)
     bits = [f"Data {_date(order['order_date'])}"]
     if include_status:
         bits.append(STATUS_LABEL.get(order["status"], order["status"]))
@@ -217,8 +234,6 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         else ""
     )
     nf = f" (NF {_esc(order.get('credit_nf'))})" if order.get("credit_nf") else ""
-    net = order.get("net_total_brl") or 0
-    after = float(order.get("list_total_brl") or 0) - float(order.get("discount_amount") or 0)
     return f"""
     <div>
       {_header(f"Ordem de Compra {order['number']}", " · ".join(bits))}
@@ -229,25 +244,33 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         {contracts}
       </div>
       <h2>2. Produtos Autodesk</h2>
-      <table>
-        <thead><tr><th>SKU</th><th>Produto</th><th class="num">Qtd</th>
-        <th class="num">Unit. USD</th><th class="num">Unit. R$</th>
-        <th class="num">Total USD</th><th class="num">Total BRL</th></tr></thead>
-        <tbody>{rows}</tbody>
-      </table>
       <div class="valor-compra">
-        <p class="lbl">Valor da compra (após descontos e créditos)</p>
-        <p class="hero">{_brl(net)}</p>
-        <p class="ext">Por extenso: {_esc(reais_extenso(net))}</p>
+        <p class="lbl">Valor da compra (após descontos)</p>
+        <p class="hero">{_brl(after)}</p>
+        <p class="ext">Por extenso: {_esc(reais_extenso(after))}</p>
       </div>
+      <table>
+        <thead><tr>
+          <th>SKU</th><th>Produto</th><th class="num">Quantidade</th>
+          <th class="num">Unit. R$</th><th class="num">Total em R$</th>
+          <th class="num">Desconto</th><th class="num">Crédito Pars usado</th>
+        </tr></thead>
+        <tbody>
+          {body}
+          <tr>
+            <td></td><td><strong>Totais</strong></td>
+            <td class="num"><strong>{_qty(tot_qty)}</strong></td>
+            <td class="num"></td>
+            <td class="num"><strong>{_money('R$', list_brl)}</strong></td>
+            <td class="num"><strong>{_money('R$', disc_amt)}</strong></td>
+            <td class="num"><strong>{_money('R$', credit)}</strong></td>
+          </tr>
+        </tbody>
+      </table>
       <div class="box">
-        <p><strong>Memória de cálculo — preços de tabela</strong></p>
-        <p>Câmbio do Dia: R$ {_fmt(order['dollar_rate'], 4)}</p>
-        <p>Lista USD: {_usd(order.get('list_total_usd'))}</p>
-        <p>Lista BRL (tabela): {_brl(order['list_total_brl'])}</p>
-        <p>Desconto {_fmt(order['discount_pct'])}%: − {_brl(order['discount_amount'])}</p>
-        <p>Após desconto: {_brl(after)}</p>
-        <p>Crédito Pars utilizado{nf}: − {_brl(order.get('credit_used'))}</p>
+        <p><strong>Valor a pagar: {_brl(net)}</strong></p>
+        <p>Valor a pagar por extenso: {_esc(reais_extenso(net))}</p>
+        <p>Crédito Pars utilizado{nf}: {_brl(credit)}</p>
         {"" if order.get("client_type") != "governo" else f"<p>Crédito Pars gerado ({_fmt(order['hubgov_credit_pct'])}% sobre lista): {_brl(order['credit_generated'])}</p>"}
         <p>Entrega das Licenças: {"Imediato" if order.get("license_delivery") == "imediato" else "Ativação em " + _date(order.get("activation_date"))}</p>
         <p>Prazo de Pagamento: {_esc(_prazo(order))}</p>

@@ -162,6 +162,7 @@ CSS = """
   .money { display: inline-block; width: 100%; text-align: center; white-space: nowrap; }
   .money .sym { display: inline-block; min-width: 28pt; text-align: center; }
   .money .amt { display: inline-block; min-width: 52pt; text-align: right; }
+  .sum-lab { text-align: right; padding-right: 8pt; }
   .box { border: 1px solid #d4cdc0; padding: 8pt 10pt; margin-top: 6pt; }
   .valor-compra { border: 2pt solid #1f4e57; padding: 10pt 12pt; margin-top: 10pt; text-align: center; }
   .valor-compra .lbl { font-size: 9pt; color: #5c6570; text-transform: uppercase; letter-spacing: 0.4pt; margin: 0 0 4pt; }
@@ -202,28 +203,21 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
     list_brl = float(order.get("list_total_brl") or 0)
     disc_amt = float(order.get("discount_amount") or 0)
     credit = float(order.get("credit_used") or 0)
-    after = list_brl - disc_amt
     net = float(order.get("net_total_brl") or 0)
     rows = []
-    for i, it in enumerate(items):
+    for it in items:
         qty = float(it.get("qty") or 0)
         unit_brl = float(it.get("list_price_usd") or 0) * rate
         total_brl = float(it.get("line_total_brl") or (qty * unit_brl))
-        share = (total_brl / list_brl) if list_brl else 0.0
-        line_disc = disc_amt * share
-        line_cred = credit * share
         rows.append(
             "<tr>"
             f"<td>{_esc(it['sku'])}</td><td>{_esc(it['product_name'])}</td>"
             f"<td class='num'>{_qty(qty)}</td>"
             f"<td class='num'>{_money('R$', unit_brl)}</td>"
             f"<td class='num'>{_money('R$', total_brl)}</td>"
-            f"<td class='num'>{_money('R$', line_disc)}</td>"
-            f"<td class='num'>{_money('R$', line_cred)}</td>"
             "</tr>"
         )
     body = "".join(rows)
-    tot_qty = sum(float(it.get("qty") or 0) for it in items)
     bits = [f"Data {_date(order['order_date'])}"]
     if include_status:
         bits.append(STATUS_LABEL.get(order["status"], order["status"]))
@@ -245,32 +239,36 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
       </div>
       <h2>2. Produtos Autodesk</h2>
       <div class="valor-compra">
-        <p class="lbl">Valor da compra (após descontos)</p>
-        <p class="hero">{_brl(after)}</p>
-        <p class="ext">Por extenso: {_esc(reais_extenso(after))}</p>
+        <p class="lbl">Valor da compra (após descontos e créditos)</p>
+        <p class="hero">{_brl(net)}</p>
+        <p class="ext">Por extenso: {_esc(reais_extenso(net))}</p>
       </div>
       <table>
         <thead><tr>
           <th>SKU</th><th>Produto</th><th class="num">Quantidade</th>
-          <th class="num">Unit. R$</th><th class="num">Total em R$</th>
-          <th class="num">Desconto</th><th class="num">Crédito Pars usado</th>
+          <th class="num">Valor Unitário</th><th class="num">Valor Total</th>
         </tr></thead>
         <tbody>
           {body}
           <tr>
-            <td></td><td><strong>Totais</strong></td>
-            <td class="num"><strong>{_qty(tot_qty)}</strong></td>
-            <td class="num"></td>
-            <td class="num"><strong>{_money('R$', list_brl)}</strong></td>
-            <td class="num"><strong>{_money('R$', disc_amt)}</strong></td>
-            <td class="num"><strong>{_money('R$', credit)}</strong></td>
+            <td></td><td colspan="3" class="sum-lab">Subtotal</td>
+            <td class="num">{_money('R$', list_brl)}</td>
+          </tr>
+          <tr>
+            <td></td><td colspan="3" class="sum-lab">Desconto</td>
+            <td class="num">{_money('− R$', disc_amt)}</td>
+          </tr>
+          <tr>
+            <td></td><td colspan="3" class="sum-lab">Crédito Pars usado{nf}</td>
+            <td class="num">{_money('− R$', credit)}</td>
+          </tr>
+          <tr>
+            <td></td><td colspan="3" class="sum-lab"><strong>Valor Total</strong></td>
+            <td class="num"><strong>{_money('R$', net)}</strong></td>
           </tr>
         </tbody>
       </table>
       <div class="box">
-        <p><strong>Valor a pagar: {_brl(net)}</strong></p>
-        <p>Valor a pagar por extenso: {_esc(reais_extenso(net))}</p>
-        <p>Crédito Pars utilizado{nf}: {_brl(credit)}</p>
         {"" if order.get("client_type") != "governo" else f"<p>Crédito Pars gerado ({_fmt(order['hubgov_credit_pct'])}% sobre lista): {_brl(order['credit_generated'])}</p>"}
         <p>Entrega das Licenças: {"Imediato" if order.get("license_delivery") == "imediato" else "Ativação em " + _date(order.get("activation_date"))}</p>
         <p>Prazo de Pagamento: {_esc(_prazo(order))}</p>

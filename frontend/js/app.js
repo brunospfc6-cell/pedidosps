@@ -396,7 +396,7 @@ async function renderOdcForm(id) {
     app.innerHTML = shell(`
       ${head("Nova Ordem de Compra", "Informe o tipo de cliente. Governo gera crédito Pars; os dois tipos podem utilizar saldo já habilitado.")}
       <div class="grid g2" style="max-width:720px">
-        <button class="choice" id="gov"><h2>Governo</h2><p class="muted">Gera crédito Pars (≥ 8% sobre lista) e pode utilizar saldo.</p></button>
+        <button class="choice" id="gov"><h2>Governo</h2><p class="muted">Gera crédito Pars (≥ 8% sobre o valor após desconto) e pode utilizar saldo.</p></button>
         <button class="choice" id="priv"><h2>Privado</h2><p class="muted">Não gera crédito. Pode utilizar saldo Pars habilitado.</p></button>
       </div>`);
     bindShell();
@@ -730,7 +730,7 @@ function drawOdc(o, suppliers, products, credits) {
           <p><span>Desconto ${Number(form.discount_pct.value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%</span><span>− ${moneyBR(t.discount_amount)}</span></p>
           <p><span>Após desconto</span><span>${moneyBR(t.after_discount)}</span></p>
           <p><span>Crédito Pars utilizado</span><span>− ${moneyBR(used)}</span></p>
-          ${gov ? `<p><span>Crédito Pars gerado</span><span>${moneyBR(t.credit_generated)}</span></p>` : ""}
+          ${gov ? `<p><span>Crédito Pars gerado (${Number(form.hubgov_credit_pct?.value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}% após desconto)</span><span>${moneyBR(t.credit_generated)}</span></p>` : ""}
         </div>`;
     } catch {}
   }

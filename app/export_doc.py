@@ -269,7 +269,7 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         </tbody>
       </table>
       <div class="box">
-        {"" if order.get("client_type") != "governo" else f"<p>Crédito Pars gerado ({_fmt(order['hubgov_credit_pct'])}% sobre lista): {_brl(order['credit_generated'])}</p>"}
+        {"" if order.get("client_type") != "governo" else f"<p>Crédito Pars gerado ({_fmt(order['hubgov_credit_pct'])}% sobre o valor após desconto): {_brl(order['credit_generated'])}</p>"}
         <p>Entrega das Licenças: {"Imediato" if order.get("license_delivery") == "imediato" else "Ativação em " + _date(order.get("activation_date"))}</p>
         <p>Prazo de Pagamento: {_esc(_prazo(order))}</p>
       </div>

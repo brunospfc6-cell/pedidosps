@@ -14,7 +14,7 @@ def compute_odc(items, dollar_rate, discount_pct, client_type, hubgov_credit_pct
     discount_amount = list_total_brl * (discount_pct / 100)
     after_discount = list_total_brl - discount_amount
     pct = max(0.0, float(hubgov_credit_pct or 0)) if client_type == "governo" else 0.0
-    credit_generated = list_total_brl * (pct / 100) if client_type == "governo" else 0.0
+    credit_generated = after_discount * (pct / 100) if client_type == "governo" else 0.0
     credit_used = max(0.0, float(credit_used or 0))
     net_total_brl = after_discount - credit_used
     below_minimum = credit_used > 0 and net_total_brl < MIN_NET_BRL
@@ -41,7 +41,7 @@ def build_memo(calc, dollar_rate, discount_pct, client_type, credit_used):
     ]
     if client_type == "governo":
         lines.append(
-            f"Crédito Pars gerado ({_br(calc['hubgov_credit_pct'] or DEFAULT_HUBGOV_PCT)}% sobre lista): "
+            f"Crédito Pars gerado ({_br(calc['hubgov_credit_pct'] or DEFAULT_HUBGOV_PCT)}% sobre o valor após desconto): "
             f"R$ {_br(calc['credit_generated'])}"
         )
     else:

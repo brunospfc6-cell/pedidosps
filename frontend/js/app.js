@@ -467,8 +467,8 @@ function drawOdc(o, suppliers, products, credits) {
         <label class="btn outline sm" style="cursor:pointer"><input type="checkbox" name="prorata" id="prorata" ${isProrata(o) ? "checked" : ""} style="width:auto;margin:0"> Pro-rata</label>
       </div>
       <div class="bd">
-        <table class="data" id="items"><thead><tr><th>Produto</th><th>Qtd</th><th class="money-h">Unit. USD</th><th class="money-h">Unit. R$</th><th></th></tr></thead>
-        <tbody>${items.map((it) => itemRow(it, isProrata(o), Number(o.dollar_rate || 0), !locked)).join("")}</tbody></table>
+        <table class="data" id="items"><thead><tr><th>Produto</th><th>Qtd</th><th class="money-h">Unit. USD</th><th class="money-h">Unit. R$</th><th>Desc. %</th><th></th></tr></thead>
+        <tbody>${items.map((it) => itemRow(it, isProrata(o), Number(o.dollar_rate || 0), !locked, o.discount_pct || 0)).join("")}</tbody></table>
         ${locked ? "" : `<button type="button" class="btn outline" id="add">Adicionar Produto</button>`}
         <div class="grid g3" style="margin-top:16px">
           <div class="field"><label>Dólar do Dia (R$)</label><input name="dollar_rate" type="number" step="0.0001" value="${o.dollar_rate || ""}"></div>
@@ -478,7 +478,7 @@ function drawOdc(o, suppliers, products, credits) {
             <option value="agendada" ${o.license_delivery === "agendada" ? "selected" : ""}>Escolher Data de Ativação</option>
           </select></div>
           <div class="field" id="actWrap" style="${o.license_delivery === "agendada" ? "" : "display:none"}"><label>Data de Ativação</label><input name="activation_date" type="date" value="${esc(o.activation_date || "")}"></div>
-          <div class="field"><label>Percentual de Desconto</label><input name="discount_pct" type="number" step="0.01" value="${o.discount_pct || 0}"></div>
+          <div class="field"><label>Aplicar desconto em todos (%)</label><input name="discount_pct" type="number" step="0.01" value="${o.discount_pct || 0}"></div>
           ${
             gov
               ? `<div class="field"><label>Percentual de Crédito Pars Gerado</label><input name="hubgov_credit_pct" type="number" step="0.01" value="${o.hubgov_credit_pct || 8}"></div>
@@ -578,7 +578,7 @@ function drawOdc(o, suppliers, products, credits) {
   };
   $("#add")?.addEventListener("click", () => {
     const tb = $("#items tbody");
-    tb.insertAdjacentHTML("beforeend", itemRow({}, $("#prorata")?.checked, Number(form.dollar_rate.value || 0), true));
+    tb.insertAdjacentHTML("beforeend", itemRow({}, $("#prorata")?.checked, Number(form.dollar_rate.value || 0), true, form.discount_pct.value));
     attachPickers(tb.lastElementChild, products, form.sale_kind.value);
   });
   $("#items")?.addEventListener("click", (e) => {
@@ -619,6 +619,7 @@ function drawOdc(o, suppliers, products, credits) {
         sku: p.dataset.sku || "",
         qty: Number($(".qty", tr).value || 1),
         list_price_usd: Number($(".unit-usd", tr)?.value || p.dataset.price || 0),
+        discount_pct: Number($(".disc", tr)?.value || 0),
       };
     }).filter((it) => it.product_name);
     const body = {
@@ -675,7 +676,10 @@ function drawOdc(o, suppliers, products, credits) {
     }
   });
   refreshTotals();
-  form.addEventListener("input", refreshTotals);
+    form.discount_pct?.addEventListener("input", () => {
+      $$("#items .disc").forEach((inp) => { inp.value = form.discount_pct.value; });
+    });
+    form.addEventListener("input", refreshTotals);
   function syncProrata() {
     const on = $("#prorata")?.checked;
     $$("#items .unit-usd").forEach((inp) => {
@@ -701,8 +705,11 @@ function drawOdc(o, suppliers, products, credits) {
       if (el) el.innerHTML = moneyBR(u * rate);
     });
     const items = $$("#items tbody tr").map((tr) => ({
+      sku: $(".picker", tr)?.dataset.sku || "",
+      product_name: $(".picker", tr)?.dataset.name || $(".pq", tr)?.value || "",
       qty: Number($(".qty", tr)?.value || 1),
       list_price_usd: Number($(".unit-usd", tr)?.value || $(".picker", tr)?.dataset.price || 0),
+      discount_pct: Number($(".disc", tr)?.value || 0),
     }));
     try {
       const t = await api("/api/odc/calc", {
@@ -727,7 +734,8 @@ function drawOdc(o, suppliers, products, credits) {
           <p><span>Lista USD</span><span>${moneyUSD(t.list_total_usd)}</span></p>
           <p><span>Câmbio do dia</span><span>R$ ${Number(rate).toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span></p>
           <p><span>Lista BRL (tabela)</span><span>${moneyBR(t.list_total_brl)}</span></p>
-          <p><span>Desconto ${Number(form.discount_pct.value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%</span><span>− ${moneyBR(t.discount_amount)}</span></p>
+          ${(t.lines || []).map((l) => `<p><span>${esc(l.sku || l.product_name || "Produto")} · ${Number(l.discount_pct).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%</span><span>− ${moneyBR(l.discount_brl)}</span></p>`).join("")}
+          <p><span>Descontos (soma por produto)</span><span>− ${moneyBR(t.discount_amount)}</span></p>
           <p><span>Após desconto</span><span>${moneyBR(t.after_discount)}</span></p>
           <p><span>Crédito Pars utilizado</span><span>− ${moneyBR(used)}</span></p>
           ${gov ? `<p><span>Crédito Pars gerado (${Number(form.hubgov_credit_pct?.value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}% após desconto)</span><span>${moneyBR(t.credit_generated)}</span></p>` : ""}
@@ -736,8 +744,9 @@ function drawOdc(o, suppliers, products, credits) {
   }
 }
 
-function itemRow(it = {}, prorata = false, rate = 0, canRemove = true) {
+function itemRow(it = {}, prorata = false, rate = 0, canRemove = true, fallbackDisc = 0) {
   const price = Number(it.list_price_usd || 0);
+  const disc = it.discount_pct != null && it.discount_pct !== "" ? it.discount_pct : fallbackDisc;
   return `<tr>
     <td><div class="picker" data-sku="${esc(it.sku || "")}" data-name="${esc(it.product_name || "")}" data-price="${it.list_price_usd || 0}" data-catalog-price="${it.list_price_usd || 0}">
       <input class="pq" placeholder="Buscar SKU, produto ou linha…" autocomplete="off" value="${esc(it.product_name || it.sku || "")}">
@@ -747,6 +756,7 @@ function itemRow(it = {}, prorata = false, rate = 0, canRemove = true) {
     <td style="width:90px"><input class="qty" type="number" min="1" value="${it.qty || 1}"></td>
     <td class="money-cell" style="width:160px"><div class="money-input"><span class="sym">US$</span><input class="unit-usd" type="number" step="0.01" min="0" value="${it.list_price_usd || ""}" ${prorata ? "" : "disabled"}></div></td>
     <td class="money-cell unit-brl">${moneyBR(price * Number(rate || 0))}</td>
+    <td style="width:100px"><input class="disc" type="number" step="0.01" min="0" value="${disc || 0}"></td>
     <td style="width:44px">${canRemove ? `<button type="button" class="btn ghost sm rm" title="Remover produto">×</button>` : ""}</td>
   </tr>`;
 }

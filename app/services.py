@@ -241,11 +241,13 @@ def save_odc(conn, user: dict, data: dict) -> dict:
         price = float(it["list_price_usd"])
         line_usd = qty * price
         line_brl = line_usd * float(data["dollar_rate"])
+        raw = it.get("discount_pct") if "discount_pct" in it else None
+        line_pct = None if raw is None or raw == "" else max(0.0, float(raw))
         conn.execute(
             """INSERT INTO purchase_order_items
-               (purchase_order_id, product_id, product_name, sku, qty, list_price_usd, line_total_usd, line_total_brl)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (odc_id, it.get("product_id"), it["product_name"], it.get("sku"), qty, price, line_usd, line_brl),
+               (purchase_order_id, product_id, product_name, sku, qty, list_price_usd, discount_pct, line_total_usd, line_total_brl)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (odc_id, it.get("product_id"), it["product_name"], it.get("sku"), qty, price, line_pct, line_usd, line_brl),
         )
 
     prev_gen = db.one(

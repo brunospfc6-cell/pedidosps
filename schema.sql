@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
   sku TEXT,
   qty REAL NOT NULL DEFAULT 1,
   list_price_usd REAL NOT NULL,
+  discount_pct REAL,
   line_total_usd REAL NOT NULL,
   line_total_brl REAL NOT NULL
 );

@@ -198,6 +198,20 @@ def _signature() -> str:
     """
 
 
+def _disc_lines(order, items, rate) -> list[str]:
+    order_pct = float(order.get("discount_pct") or 0)
+    out = []
+    for it in items:
+        raw = it.get("discount_pct")
+        pct = order_pct if raw is None or raw == "" else float(raw)
+        qty = float(it.get("qty") or 0)
+        line_brl = float(it.get("line_total_brl") or (qty * float(it.get("list_price_usd") or 0) * rate))
+        disc = line_brl * (pct / 100)
+        name = it.get("sku") or it.get("product_name") or "Produto"
+        out.append(f"<p>{_esc(name)}: {_fmt(pct)}% sobre {_brl(line_brl)} = R$ -{_fmt(disc)}</p>")
+    return out
+
+
 def odc_html(order: dict, items: list[dict], include_status: bool = False) -> str:
     rate = float(order.get("dollar_rate") or 0)
     list_brl = float(order.get("list_total_brl") or 0)
@@ -295,6 +309,8 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         <p><strong>Memória de cálculo</strong></p>
         <p>Dólar do dia: R$ {_fmt(rate, 4)}</p>
         <p>Valor do pedido em dólar: {_usd(order.get("list_total_usd"))}</p>
+        <p><strong>Desconto por produto</strong></p>
+        {"".join(_disc_lines(order, items, rate))}
       </div>
       {_signature()}
     </div>

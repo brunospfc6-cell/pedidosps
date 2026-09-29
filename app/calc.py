@@ -7,11 +7,35 @@ def _br(n, decimals=2) -> str:
 
 
 def compute_odc(items, dollar_rate, discount_pct, client_type, hubgov_credit_pct, credit_used):
-    list_total_usd = sum((float(it.get("qty") or 0) * float(it.get("list_price_usd") or 0)) for it in items)
     rate = float(dollar_rate or 0)
-    list_total_brl = list_total_usd * rate
-    discount_pct = max(0.0, float(discount_pct or 0))
-    discount_amount = list_total_brl * (discount_pct / 100)
+    order_pct = max(0.0, float(discount_pct or 0))
+    list_total_usd = 0.0
+    list_total_brl = 0.0
+    discount_amount = 0.0
+    lines = []
+    for it in items:
+        qty = float(it.get("qty") or 0)
+        usd = float(it.get("list_price_usd") or 0)
+        line_usd = qty * usd
+        line_brl = line_usd * rate
+        raw = it.get("discount_pct") if "discount_pct" in it else None
+        if raw is None or raw == "":
+            pct_line = order_pct
+        else:
+            pct_line = max(0.0, float(raw))
+        disc = line_brl * (pct_line / 100)
+        list_total_usd += line_usd
+        list_total_brl += line_brl
+        discount_amount += disc
+        lines.append({
+            "sku": it.get("sku") or "",
+            "product_name": it.get("product_name") or "",
+            "qty": qty,
+            "line_brl": line_brl,
+            "discount_pct": pct_line,
+            "discount_brl": disc,
+            "after_discount": line_brl - disc,
+        })
     after_discount = list_total_brl - discount_amount
     pct = max(0.0, float(hubgov_credit_pct or 0)) if client_type == "governo" else 0.0
     credit_generated = after_discount * (pct / 100) if client_type == "governo" else 0.0
@@ -27,6 +51,7 @@ def compute_odc(items, dollar_rate, discount_pct, client_type, hubgov_credit_pct
         "net_total_brl": net_total_brl,
         "below_minimum": below_minimum,
         "hubgov_credit_pct": pct,
+        "lines": lines,
     }
 
 
@@ -36,9 +61,14 @@ def build_memo(calc, dollar_rate, discount_pct, client_type, credit_used):
         f"Lista USD: US$ {_br(calc['list_total_usd'])}",
         f"Câmbio do Dia: R$ {_br(dollar_rate, 4)}",
         f"Lista BRL: R$ {_br(calc['list_total_brl'])}",
-        f"Desconto ({_br(discount_pct)}%): − R$ {_br(calc['discount_amount'])}",
-        f"Após desconto: R$ {_br(calc['after_discount'])}",
     ]
+    for ln in calc.get("lines") or []:
+        name = ln.get("sku") or ln.get("product_name") or "Produto"
+        lines.append(
+            f"  {name}: desconto {_br(ln['discount_pct'])}% sobre R$ {_br(ln['line_brl'])} = − R$ {_br(ln['discount_brl'])}"
+        )
+    lines.append(f"Descontos (soma por produto): − R$ {_br(calc['discount_amount'])}")
+    lines.append(f"Após desconto: R$ {_br(calc['after_discount'])}")
     if client_type == "governo":
         lines.append(
             f"Crédito Pars gerado ({_br(calc['hubgov_credit_pct'] or DEFAULT_HUBGOV_PCT)}% sobre o valor após desconto): "

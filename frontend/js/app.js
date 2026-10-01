@@ -1285,8 +1285,7 @@ async function renderUsers() {
 async function renderGestao() {
   const d = await api("/api/gestao");
   app.innerHTML = shell(`${head("Gestão e Análise", "Volume de vendas, margem e extração de planilhas.",
-    `<a class="btn outline" href="/api/export/csv?kind=odc">Extrair ODCs</a>
-     <a class="btn outline" href="/api/export/csv?kind=vendas">Extrair Vendas</a>`)}
+    `<a class="btn outline" href="/api/export/xlsx">Extrair Excel</a>`)}
     <div class="grid g2">
       <div class="card"><div class="hd"><h3>Por Vendedor</h3></div><div class="bd" style="padding:0">
         <table class="data"><thead><tr><th>Vendedor</th><th>Pedidos</th><th class="num">Total</th></tr></thead>

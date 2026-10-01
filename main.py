@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import asynccontextmanager
+from datetime import date, datetime
+from io import BytesIO
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response as FastResponse
 from fastapi.staticfiles import StaticFiles
+from openpyxl import Workbook
+from openpyxl.styles import Font
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app import db
@@ -608,6 +612,89 @@ def export_csv(request: Request, kind: str = "odc"):
         body.encode("utf-8"),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+_STATUS_PV = {"aberto": "Aberto", "cancelado": "Cancelado"}
+_TIPO_CLIENTE = {"governo": "Governo", "privado": "Privado"}
+
+
+def _excel_date(value):
+    if not value:
+        return None
+    text = str(value)[:10]
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return text
+
+
+@app.get("/api/export/xlsx")
+def export_xlsx(request: Request):
+    u = current_user(request)
+    if u["role"] not in ("administrador", "diretor"):
+        raise HTTPException(403, "Acesso restrito.")
+    conn = db.get_conn()
+    rows = db.rows(
+        conn.execute(
+            """SELECT so.number, so.order_date, so.status, so.client_type, po.number AS odc,
+                      po.client_name, so.sale_total_brl, po.net_total_brl,
+                      po.credit_generated, po.credit_used, so.seller_name
+               FROM sales_orders so
+               JOIN purchase_orders po ON po.id = so.purchase_order_id
+               ORDER BY so.seq"""
+        )
+    )
+    headers = [
+        "Número do pedido de venda",
+        "Data da ordem",
+        "Status",
+        "Tipo de cliente",
+        "ODC",
+        "Nome do cliente",
+        "Valor de pedido de venda",
+        "Valor do pedido de compra",
+        "Crédito gerado",
+        "Crédito utilizado",
+        "Vendedor",
+    ]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Gestão e Análise"
+    ws.append(headers)
+    for r in rows:
+        ws.append([
+            r["number"],
+            _excel_date(r["order_date"]),
+            _STATUS_PV.get(r["status"], r["status"] or ""),
+            _TIPO_CLIENTE.get(r["client_type"], r["client_type"] or ""),
+            r["odc"],
+            r["client_name"] or "",
+            float(r["sale_total_brl"] or 0),
+            float(r["net_total_brl"] or 0),
+            float(r["credit_generated"] or 0),
+            float(r["credit_used"] or 0),
+            r["seller_name"] or "",
+        ])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in ws.iter_rows(min_row=2, min_col=2, max_col=2):
+        for cell in row:
+            if isinstance(cell.value, date):
+                cell.number_format = "DD/MM/YYYY"
+    for row in ws.iter_rows(min_row=2, min_col=7, max_col=10):
+        for cell in row:
+            cell.number_format = '#,##0.00'
+    for col in ws.columns:
+        letter = col[0].column_letter
+        width = max(len(str(c.value or "")) for c in col)
+        ws.column_dimensions[letter].width = min(max(width + 2, 14), 42)
+    buf = BytesIO()
+    wb.save(buf)
+    return FastResponse(
+        buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="gestao-vendas.xlsx"'},
     )
 
 

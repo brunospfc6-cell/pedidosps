@@ -637,7 +637,7 @@ def export_xlsx(request: Request):
     conn = db.get_conn()
     rows = db.rows(
         conn.execute(
-            """SELECT so.number, so.order_date, so.status, so.client_type, po.number AS odc,
+            """SELECT so.number, so.order_date, so.margin_pct, so.status, so.client_type, po.number AS odc,
                       po.client_name, so.sale_total_brl, po.net_total_brl,
                       po.credit_generated, po.credit_used, so.seller_name
                FROM sales_orders so
@@ -648,6 +648,7 @@ def export_xlsx(request: Request):
     headers = [
         "Número do pedido de venda",
         "Data da ordem",
+        "Margem",
         "Status",
         "Tipo de cliente",
         "ODC",
@@ -666,6 +667,7 @@ def export_xlsx(request: Request):
         ws.append([
             r["number"],
             _excel_date(r["order_date"]),
+            float(r["margin_pct"] or 0),
             _STATUS_PV.get(r["status"], r["status"] or ""),
             _TIPO_CLIENTE.get(r["client_type"], r["client_type"] or ""),
             r["odc"],
@@ -682,7 +684,10 @@ def export_xlsx(request: Request):
         for cell in row:
             if isinstance(cell.value, date):
                 cell.number_format = "DD/MM/YYYY"
-    for row in ws.iter_rows(min_row=2, min_col=7, max_col=10):
+    for row in ws.iter_rows(min_row=2, min_col=3, max_col=3):
+        for cell in row:
+            cell.number_format = '0.00"%"'
+    for row in ws.iter_rows(min_row=2, min_col=8, max_col=11):
         for cell in row:
             cell.number_format = '#,##0.00'
     for col in ws.columns:

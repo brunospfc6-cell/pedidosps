@@ -254,3 +254,37 @@ export function rowsToCsv(rows: Record<string, string>[]) {
   }
   return `\ufeff${lines.join("\n")}`;
 }
+
+function xml(value: string) {
+  return value
+    .replace(/&/g, "&" + "amp;")
+    .replace(/</g, "&" + "lt;")
+    .replace(/>/g, "&" + "gt;")
+    .replace(/"/g, "&" + "quot;");
+}
+
+/** Planilha que o Excel abre, sem alterar os dados de origem. */
+export function rowsToExcel(rows: Record<string, string>[], sheet = "Gestão e Análise") {
+  const headers = rows[0] ? Object.keys(rows[0]) : [];
+  const cell = (value: string, header: string) => {
+    const money = header.startsWith("Valor") || header.startsWith("Crédito");
+    const margin = header === "Margem";
+    const n = Number(String(value).replace(",", "."));
+    if ((money || margin) && value !== "" && Number.isFinite(n)) {
+      return `<Cell><Data ss:Type="Number">${n}</Data></Cell>`;
+    }
+    return `<Cell><Data ss:Type="String">${xml(value)}</Data></Cell>`;
+  };
+  const head = headers.map((h) => `<Cell><Data ss:Type="String">${xml(h)}</Data></Cell>`).join("");
+  const body = rows
+    .map((r) => `<Row>${headers.map((h) => cell(String(r[h] ?? ""), h)).join("")}</Row>`)
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Worksheet ss:Name="${xml(sheet)}"><Table>
+<Row>${head}</Row>
+${body}
+</Table></Worksheet>
+</Workbook>`;
+}

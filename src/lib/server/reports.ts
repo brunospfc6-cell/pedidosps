@@ -103,15 +103,34 @@ export const exportOrdersCsv = createServerFn({ method: "POST" })
       );
     }
     const rows = await sql<Record<string, string | number | null>>`
-      select so.number, so.order_date, so.status, so.client_type, po.number as odc, po.client_name,
-             po.client_csn, so.contract_number, so.proposal_number, so.acceptance_date,
-             so.margin_pct, so.seller_name, so.sale_total_brl, so.credit_used,
-             so.credit_generated, so.payment_term_days, so.finance_contact_name
+      select so.number, so.order_date, so.margin_pct, so.status, so.client_type,
+             po.number as odc, po.client_name, so.sale_total_brl, po.net_total_brl,
+             coalesce(so.credit_generated, po.credit_generated) as credit_generated,
+             coalesce(so.credit_used, po.credit_used) as credit_used,
+             so.seller_name
       from sales_orders so
       join purchase_orders po on po.id = so.purchase_order_id
       order by so.seq
     `;
-    return rows.map((r) =>
-      Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v ?? ""])) as Record<string, string>,
-    );
+    const statusLabel: Record<string, string> = { aberto: "Aberto", cancelado: "Cancelado" };
+    const typeLabel: Record<string, string> = { governo: "Governo", privado: "Privado" };
+    const brDate = (value: string | number | null) => {
+      const text = String(value ?? "").slice(0, 10);
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+      return m ? `${m[3]}/${m[2]}/${m[1]}` : text;
+    };
+    return rows.map((r) => ({
+      "Número do pedido de venda": String(r.number ?? ""),
+      "Data da ordem": brDate(r.order_date),
+      Margem: String(r.margin_pct ?? "0"),
+      Status: statusLabel[String(r.status ?? "")] ?? String(r.status ?? ""),
+      "Tipo de cliente": typeLabel[String(r.client_type ?? "")] ?? String(r.client_type ?? ""),
+      ODC: String(r.odc ?? ""),
+      "Nome do cliente": String(r.client_name ?? ""),
+      "Valor de pedido de venda": String(r.sale_total_brl ?? "0"),
+      "Valor do pedido de compra": String(r.net_total_brl ?? "0"),
+      "Crédito gerado": String(r.credit_generated ?? "0"),
+      "Crédito utilizado": String(r.credit_used ?? "0"),
+      Vendedor: String(r.seller_name ?? ""),
+    }));
   });

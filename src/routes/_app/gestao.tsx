@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { rowsToCsv } from "@/lib/export-doc";
+import { rowsToCsv, rowsToExcel } from "@/lib/export-doc";
 import { useProfile } from "@/lib/profile-context";
 import { directorOverview, exportOrdersCsv } from "@/lib/server/reports";
 import { brl, downloadBlob, pct } from "@/lib/utils";
@@ -40,7 +40,14 @@ function GestaoPage() {
   async function extract(kind: "odc" | "vendas") {
     try {
       const rows = await exportOrdersCsv({ data: { kind } });
-      downloadBlob(new Blob([rowsToCsv(rows)], { type: "text/csv;charset=utf-8" }), `${kind}.csv`);
+      if (kind === "vendas") {
+        downloadBlob(
+          new Blob([rowsToExcel(rows)], { type: "application/vnd.ms-excel" }),
+          "gestao-vendas.xls",
+        );
+      } else {
+        downloadBlob(new Blob([rowsToCsv(rows)], { type: "text/csv;charset=utf-8" }), `${kind}.csv`);
+      }
       toast.success("Planilha gerada.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha na extração");
@@ -63,7 +70,7 @@ function GestaoPage() {
               Extrair ODCs
             </Button>
             <Button type="button" variant="outline" onClick={() => extract("vendas")}>
-              Extrair Vendas
+              Extrair Excel
             </Button>
           </>
         }

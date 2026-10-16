@@ -1239,10 +1239,17 @@ async function renderUsers() {
       <tbody>${rows
         .map(
           (u) => `<tr>
-          <td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc({ administrador: "Administrador", vendedor: "Vendedor", diretor: "Diretor" }[u.role])}</td>
+          <td>${esc(u.name)}</td>
+          <td>${esc(u.email)}</td>
+          <td><select class="role-sel" data-id="${u.id}">
+            <option value="vendedor"${u.role === "vendedor" ? " selected" : ""}>Vendedor</option>
+            <option value="diretor"${u.role === "diretor" ? " selected" : ""}>Diretor</option>
+            <option value="administrador"${u.role === "administrador" ? " selected" : ""}>Administrador</option>
+          </select></td>
           <td>${u.active ? badge("aberto").replace("Aberto", "Ativo") : badge("cancelado").replace("Cancelado", "Inativo")}</td>
           <td class="row-actions">
             <button class="btn outline sm tog" data-id="${u.id}" data-active="${u.active ? "1" : "0"}" data-name="${esc(u.name)}" data-role="${u.role}">${u.active ? "Desativar" : "Ativar"}</button>
+            <button class="btn outline sm role" data-id="${u.id}" data-name="${esc(u.name)}" data-active="${u.active ? "1" : "0"}" data-role="${u.role}">Alterar Perfil</button>
             <button class="btn ghost sm pw" data-id="${u.id}">Definir Senha</button>
           </td></tr>`,
         )
@@ -1266,6 +1273,26 @@ async function renderUsers() {
         body: { name: b.dataset.name, role: b.dataset.role, active: b.dataset.active !== "1" },
       });
       route();
+    };
+  });
+  $$(".role").forEach((b) => {
+    b.onclick = async () => {
+      const sel = document.querySelector(`.role-sel[data-id="${b.dataset.id}"]`);
+      const role = sel ? sel.value : b.dataset.role;
+      if (role === b.dataset.role) return toast("Escolha outro perfil e clique em Alterar Perfil.", true);
+      if (String(me.id) === String(b.dataset.id) && role !== "administrador") {
+        return toast("Você não pode tirar o perfil de administrador da própria conta.", true);
+      }
+      try {
+        await api(`/api/users/${b.dataset.id}`, {
+          method: "POST",
+          body: { name: b.dataset.name, role, active: b.dataset.active === "1" },
+        });
+        toast("Perfil atualizado.");
+        route();
+      } catch (e) {
+        toast(e.message, true);
+      }
     };
   });
   $$(".pw").forEach((b) => {

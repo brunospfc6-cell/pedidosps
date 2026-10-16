@@ -147,6 +147,8 @@ def update_user(request: Request, user_id: int, payload: dict):
         raise HTTPException(403, "Somente o administrador gerencia usuários.")
     if user_id == u["id"] and payload.get("active") is False:
         raise HTTPException(400, "Você não pode desativar a própria conta.")
+    if user_id == u["id"] and payload.get("role") not in (None, "administrador"):
+        raise HTTPException(400, "Você não pode tirar o perfil de administrador da própria conta.")
     with db.tx() as conn:
         conn.execute(
             "UPDATE users SET name=?, role=?, active=? WHERE id=?",

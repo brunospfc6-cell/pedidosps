@@ -113,6 +113,11 @@ function UsuariosPage() {
       await updateUser({
         data: { userId: user.userId, name: user.name, role, active: user.active },
       });
+      setRoleDraft((current) => {
+        const next = { ...current };
+        delete next[user.userId];
+        return next;
+      });
       toast.success("Perfil atualizado.");
       reload();
     } catch (err) {

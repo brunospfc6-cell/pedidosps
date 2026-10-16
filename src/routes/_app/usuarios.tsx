@@ -33,14 +33,7 @@ function UsuariosPage() {
   const [resetFor, setResetFor] = useState<{ userId: string; email: string } | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
-  const [roleFor, setRoleFor] = useState<{
-    userId: string;
-    name: string;
-    email: string;
-    role: Role;
-    active: boolean;
-  } | null>(null);
-  const [nextRole, setNextRole] = useState<Role>("vendedor");
+  const [roleDraft, setRoleDraft] = useState<Record<string, Role>>({});
   const [busy, setBusy] = useState(false);
 
   function reload() {
@@ -100,23 +93,26 @@ function UsuariosPage() {
     }
   }
 
-  async function saveRole() {
-    if (!roleFor) return;
-    if (roleFor.userId === profile.userId && nextRole !== "administrador") {
+  async function changeRole(user: {
+    userId: string;
+    name: string;
+    role: Role;
+    active: boolean;
+  }) {
+    const role = roleDraft[user.userId] ?? user.role;
+    if (role === user.role) {
+      toast.error("Escolha outro perfil na coluna Perfil e depois clique em Alterar Perfil.");
+      return;
+    }
+    if (user.userId === profile.userId && role !== "administrador") {
       toast.error("Você não pode tirar o perfil de administrador da própria conta.");
       return;
     }
     setBusy(true);
     try {
       await updateUser({
-        data: {
-          userId: roleFor.userId,
-          name: roleFor.name,
-          role: nextRole,
-          active: roleFor.active,
-        },
+        data: { userId: user.userId, name: user.name, role, active: user.active },
       });
-      setRoleFor(null);
       toast.success("Perfil atualizado.");
       reload();
     } catch (err) {
@@ -225,31 +221,6 @@ function UsuariosPage() {
         </Card>
       ) : null}
 
-      {roleFor ? (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Alterar Perfil de {roleFor.name}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Novo Perfil" hint={roleFor.email}>
-              <Select value={nextRole} onChange={(e) => setNextRole(e.target.value as Role)}>
-                <option value="vendedor">Vendedor</option>
-                <option value="diretor">Diretor</option>
-                <option value="administrador">Administrador</option>
-              </Select>
-            </Field>
-            <div className="flex items-end gap-2">
-              <Button type="button" onClick={saveRole} disabled={busy}>
-                Salvar Perfil
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setRoleFor(null)}>
-                Cancelar
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
       {data?.pending.length ? (
         <Card className="mb-6">
           <CardHeader>
@@ -287,7 +258,7 @@ function UsuariosPage() {
 
       <Card>
         <CardContent className="overflow-x-auto p-0">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[860px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 <th className="px-5 py-3 font-medium">Nome</th>
@@ -302,7 +273,19 @@ function UsuariosPage() {
                 <tr key={u.userId} className="border-b border-border last:border-0">
                   <td className="px-5 py-3">{u.name}</td>
                   <td className="px-3 py-3">{u.email}</td>
-                  <td className="px-3 py-3">{ROLE_LABEL[u.role]}</td>
+                  <td className="px-3 py-3">
+                    <Select
+                      className="h-9 min-w-[160px]"
+                      value={roleDraft[u.userId] ?? u.role}
+                      onChange={(e) =>
+                        setRoleDraft((current) => ({ ...current, [u.userId]: e.target.value as Role }))
+                      }
+                    >
+                      <option value="vendedor">Vendedor</option>
+                      <option value="diretor">Diretor</option>
+                      <option value="administrador">Administrador</option>
+                    </Select>
+                  </td>
                   <td className="px-3 py-3">
                     <Badge variant={u.active ? "ok" : "danger"}>{u.active ? "Ativo" : "Inativo"}</Badge>
                   </td>
@@ -330,16 +313,8 @@ function UsuariosPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() => {
-                          setRoleFor({
-                            userId: u.userId,
-                            name: u.name,
-                            email: u.email,
-                            role: u.role,
-                            active: u.active,
-                          });
-                          setNextRole(u.role);
-                        }}
+                        disabled={busy}
+                        onClick={() => changeRole(u)}
                       >
                         Alterar Perfil
                       </Button>

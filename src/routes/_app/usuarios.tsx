@@ -33,6 +33,14 @@ function UsuariosPage() {
   const [resetFor, setResetFor] = useState<{ userId: string; email: string } | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
+  const [roleFor, setRoleFor] = useState<{
+    userId: string;
+    name: string;
+    email: string;
+    role: Role;
+    active: boolean;
+  } | null>(null);
+  const [nextRole, setNextRole] = useState<Role>("vendedor");
   const [busy, setBusy] = useState(false);
 
   function reload() {
@@ -87,6 +95,32 @@ function UsuariosPage() {
       toast.success("Senha atualizada.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao definir senha");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveRole() {
+    if (!roleFor) return;
+    if (roleFor.userId === profile.userId && nextRole !== "administrador") {
+      toast.error("Você não pode tirar o perfil de administrador da própria conta.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateUser({
+        data: {
+          userId: roleFor.userId,
+          name: roleFor.name,
+          role: nextRole,
+          active: roleFor.active,
+        },
+      });
+      setRoleFor(null);
+      toast.success("Perfil atualizado.");
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao alterar o perfil");
     } finally {
       setBusy(false);
     }
@@ -191,6 +225,31 @@ function UsuariosPage() {
         </Card>
       ) : null}
 
+      {roleFor ? (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Alterar Perfil de {roleFor.name}</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="Novo Perfil" hint={roleFor.email}>
+              <Select value={nextRole} onChange={(e) => setNextRole(e.target.value as Role)}>
+                <option value="vendedor">Vendedor</option>
+                <option value="diretor">Diretor</option>
+                <option value="administrador">Administrador</option>
+              </Select>
+            </Field>
+            <div className="flex items-end gap-2">
+              <Button type="button" onClick={saveRole} disabled={busy}>
+                Salvar Perfil
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setRoleFor(null)}>
+                Cancelar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {data?.pending.length ? (
         <Card className="mb-6">
           <CardHeader>
@@ -266,6 +325,23 @@ function UsuariosPage() {
                         }}
                       >
                         {u.active ? "Desativar" : "Ativar"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setRoleFor({
+                            userId: u.userId,
+                            name: u.name,
+                            email: u.email,
+                            role: u.role,
+                            active: u.active,
+                          });
+                          setNextRole(u.role);
+                        }}
+                      >
+                        Alterar Perfil
                       </Button>
                       <Button
                         type="button"

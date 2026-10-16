@@ -1,0 +1,14 @@
+[ ] Pasta do app em disco LOCAL do servidor (ex. C:\Apps\Pro-Systems)
+[ ] Python 3.10+ com PATH
+[ ] venv criado e pip install -r requirements.txt
+[ ] .env com SECRET_KEY nova, PUBLIC_URL e COOKIE_SECURE=1
+[ ] python deploy-windows-server\patch-producao.py
+[ ] Teste local http://127.0.0.1:8000
+[ ] Serviço Windows ProSystemsApp (NSSM) rodando
+[ ] DNS A do subdomínio = IP público do servidor
+[ ] Site IIS no host do domínio, HTTPS com certificado
+[ ] URL Rewrite + ARR (Enable proxy)
+[ ] frontend\web.config copiado
+[ ] Porta 8000 NÃO publicada na internet
+[ ] Senhas de teste trocadas depois do primeiro acesso
+[ ] Backup diário da pasta data\

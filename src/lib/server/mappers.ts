@@ -179,13 +179,25 @@ export function mapSalesOrder(
 }
 
 export function mapHubgov(r: Record<string, unknown>): HubgovEntry {
+  const notes = r.notes ? String(r.notes) : "";
+  const purchaseOrderId = r.purchase_order_id == null ? null : num(r.purchase_order_id);
+  const kind = r.kind as "generated" | "used";
+  const source =
+    kind === "used"
+      ? "utilizado"
+      : purchaseOrderId
+        ? "pedido"
+        : notes.startsWith("Saldo inicial")
+          ? "inicial"
+          : "externa";
   return {
     id: num(r.id),
-    kind: r.kind as "generated" | "used",
+    kind,
     amount: num(r.amount),
     nfNumber: r.nf_number ? String(r.nf_number) : null,
-    purchaseOrderId: r.purchase_order_id == null ? null : num(r.purchase_order_id),
+    purchaseOrderId,
     createdAt: String(r.created_at),
-    clientName: r.client_name ? String(r.client_name) : null,
+    clientName: r.client_name ? String(r.client_name) : notes || null,
+    source,
   };
 }

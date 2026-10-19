@@ -1065,11 +1065,21 @@ async function renderClients() {
 
 async function renderCredits() {
   const d = await api("/api/credits");
+  const clients = await api("/api/clients").catch(() => []);
   const admin = me.role === "administrador";
   app.innerHTML = shell(`${head("Créditos Pars", "Crédito gerado em pedido de governo só fica disponível depois que o administrador habilitar. O saldo inicial de R$ 194.372,95 já está habilitado.")}
+    ${admin ? `<div class="card" style="margin-bottom:16px"><div class="hd"><h3>Crédito de outra fonte</h3><p class="muted">Somente o administrador. Informe a NF geradora, o cliente e o valor. O lançamento entra no saldo disponível e não altera créditos já existentes.</p></div>
+      <div class="bd grid g3">
+        <div class="field"><label>NF geradora</label><input id="ext-nf" placeholder="Número da nota"></div>
+        <div class="field"><label>Cliente</label><input id="ext-cli" list="ext-clients" placeholder="Nome do cliente"></div>
+        <datalist id="ext-clients">${(clients || []).map((c) => `<option value="${esc(c.name)}"></option>`).join("")}</datalist>
+        <div class="field"><label>Valor (R$)</label><input id="ext-amt" type="number" min="0.01" step="0.01"></div>
+        <div style="align-self:end"><button class="btn primary" id="ext-add" type="button">Acrescentar crédito</button></div>
+      </div>
+    </div>` : ""}
     <div class="grid g4" style="margin-bottom:16px">
       <div class="card stat"><small>Gerado</small><strong>${brl(d.summary.generated)}</strong></div>
-      <div class="card stat"><small>Pendente</small><strong>${brl(d.summary.pending || 0)}</strong></div>
+      <div class="card stat"><small>A Liberar</small><strong>${brl(d.summary.pending || 0)}</strong></div>
       <div class="card stat"><small>Utilizado</small><strong>${brl(d.summary.used)}</strong></div>
       <div class="card stat"><small>Disponível</small><strong>${brl(d.summary.remaining)}</strong></div>
     </div>
@@ -1079,13 +1089,16 @@ async function renderCredits() {
       </tr></thead>
       <tbody>${(d.ledger || [])
         .map((r) => {
-          const inicial = !r.purchase_order_id && r.kind === "generated";
+          const notes = r.notes || "";
+          const inicial = !r.purchase_order_id && r.kind === "generated" && notes.startsWith("Saldo inicial");
+          const externa = !r.purchase_order_id && r.kind === "generated" && !inicial;
           const enabled = r.kind !== "generated" || r.enabled === 1 || r.enabled === true || (r.enabled == null && inicial);
           const pending = r.kind === "generated" && !enabled;
-          const tipo = inicial ? "Saldo inicial" : r.kind === "generated" ? "Gerado" : "Utilizado";
-          const st = r.kind === "used" ? badge("enviado_pars").replace("Enviado à PARS", "Baixado") : pending
-            ? `<span class="badge warn">Pendente</span>`
-            : `<span class="badge ok">Habilitado</span>`;
+          const tipo = inicial ? "Saldo inicial" : externa ? "Outra fonte" : r.kind === "generated" ? "Gerado" : "Utilizado";
+          const cliente = r.client_name || r.linked_client_name || ((inicial || externa) && notes ? notes : "") || "—";
+          const st = r.kind === "used" ? badge("enviado_pars").replace("Enviado à PARS", "Usado") : pending
+            ? `<span class="badge warn">A Liberar</span>`
+            : `<span class="badge ok">Disponível</span>`;
           const acts = admin && r.kind === "generated"
             ? `<div class="row-actions">
                 ${pending ? `<button class="btn primary sm hgen" data-id="${r.id}" data-nf="${esc(r.nf_number || r.generated_nf || "")}">Habilitar</button>` : ""}
@@ -1097,7 +1110,7 @@ async function renderCredits() {
             <td>${tipo}</td>
             <td class="mono">${esc(r.nf_number || r.generated_nf || "—")}</td>
             <td class="mono">${r.purchase_order_id ? `<a href="#/odc/${r.purchase_order_id}">${esc(r.purchase_order_number || "")}</a>` : "—"}</td>
-            <td>${esc(r.notes && inicial ? r.notes : r.client_name || "—")}</td>
+            <td>${esc(cliente)}</td>
             <td class="num">${brl(r.amount)}</td>
             <td>${st}</td>
             ${admin ? `<td>${acts}</td>` : ""}
@@ -1106,6 +1119,25 @@ async function renderCredits() {
         .join("")}</tbody></table>
     </div></div>`);
   bindShell();
+  $("#ext-add")?.addEventListener("click", async () => {
+    const btn = $("#ext-add");
+    btn.disabled = true;
+    try {
+      await api("/api/credits/external", {
+        method: "POST",
+        body: {
+          nf_number: $("#ext-nf").value,
+          client_name: $("#ext-cli").value,
+          amount: Number(String($("#ext-amt").value).replace(",", ".")),
+        },
+      });
+      toast("Crédito de outra fonte acrescentado.");
+      route();
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+    }
+  });
   $$(".hgen").forEach((b) => {
     b.onclick = async () => {
       const nf = prompt("Número da nota fiscal que gerou este crédito:", b.dataset.nf || "");

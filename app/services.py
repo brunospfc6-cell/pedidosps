@@ -551,6 +551,33 @@ def available_credits(conn) -> list[dict]:
     )
 
 
+def add_external_credit(conn, user: dict, nf_number: str, client_name: str, amount) -> dict:
+    if user["role"] != "administrador":
+        raise HTTPException(403, "Somente o administrador acrescenta crédito de outra fonte.")
+    nf = (nf_number or "").strip()
+    name = (client_name or "").strip()
+    if not nf:
+        raise HTTPException(400, "Informe a NF geradora.")
+    if len(name) < 2:
+        raise HTTPException(400, "Informe o cliente.")
+    try:
+        value = round(float(amount), 2)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Informe o valor do crédito.")
+    if value <= 0:
+        raise HTTPException(400, "O valor do crédito deve ser maior que zero.")
+    found = db.one(
+        conn.execute("SELECT id FROM clients WHERE lower(name)=lower(?) ORDER BY id LIMIT 1", (name,))
+    )
+    cur = conn.execute(
+        """INSERT INTO hubgov_ledger
+           (client_id, purchase_order_id, kind, amount, nf_number, notes, enabled, created_by)
+           VALUES (?, NULL, 'generated', ?, ?, ?, 1, ?)""",
+        (found["id"] if found else None, value, nf, name, user["id"]),
+    )
+    return db.one(conn.execute("SELECT * FROM hubgov_ledger WHERE id=?", (cur.lastrowid,)))
+
+
 def enable_credit(conn, user: dict, ledger_id: int, nf_number: str | None) -> dict:
     if user["role"] != "administrador":
         raise HTTPException(403, "Somente o administrador habilita créditos.")

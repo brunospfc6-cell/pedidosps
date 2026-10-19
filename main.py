@@ -377,13 +377,25 @@ def credits(request: Request):
     summary = services.credit_summary(conn)
     ledger = db.rows(
         conn.execute(
-            """SELECT h.*, po.client_name, po.number AS purchase_order_number, po.generated_nf
+            """SELECT h.*, po.client_name, po.number AS purchase_order_number, po.generated_nf,
+                      c.name AS linked_client_name
                FROM hubgov_ledger h
                LEFT JOIN purchase_orders po ON po.id = h.purchase_order_id
+               LEFT JOIN clients c ON c.id = h.client_id
                ORDER BY h.id DESC"""
         )
     )
     return {"summary": summary, "ledger": ledger, "available": services.available_credits(conn)}
+
+
+@app.post("/api/credits/external")
+def add_external_credit(request: Request, payload: dict):
+    u = require_admin(request)
+    with db.tx() as conn:
+        row = services.add_external_credit(
+            conn, u, payload.get("nf_number"), payload.get("client_name"), payload.get("amount")
+        )
+        return {"ok": True, "credit": row, "summary": services.credit_summary(conn)}
 
 
 @app.post("/api/credits/{ledger_id}/enable")

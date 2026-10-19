@@ -151,6 +151,7 @@ export type HubgovEntry = {
   purchaseOrderId: number | null;
   createdAt: string;
   clientName?: string | null;
+  source?: "inicial" | "externa" | "pedido" | "utilizado";
 };
 
 export const ROLE_LABEL: Record<Role, string> = {

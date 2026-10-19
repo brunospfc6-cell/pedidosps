@@ -264,29 +264,62 @@ export const upsertClient = createServerFn({ method: "POST" })
     return { id: rows[0].id };
   });
 
+async function ensureCreditNotes(sql: Awaited<ReturnType<typeof getSql>>) {
+  await sql.query(`alter table hubgov_ledger add column if not exists notes text`);
+}
+
 export const listCredits = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const profile = await requireProfile(context.userId);
     const sql = await getSql();
+    await ensureCreditNotes(sql);
     const rows =
       profile.role === "vendedor"
         ? await sql`
-            select h.*, po.client_name
+            select h.*, coalesce(po.client_name, c.name, h.notes) as client_name
             from hubgov_ledger h
             left join purchase_orders po on po.id = h.purchase_order_id
+            left join clients c on c.id = h.client_id
             where h.created_by = ${context.userId}
             order by h.created_at desc
             limit 200
           `
         : await sql`
-            select h.*, po.client_name
+            select h.*, coalesce(po.client_name, c.name, h.notes) as client_name
             from hubgov_ledger h
             left join purchase_orders po on po.id = h.purchase_order_id
+            left join clients c on c.id = h.client_id
             order by h.created_at desc
             limit 400
           `;
     return rows.map(mapHubgov);
+  });
+
+export const addExternalCredit = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(
+    z.object({
+      nfNumber: z.string().min(1),
+      clientName: z.string().min(2),
+      amount: z.number().positive(),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const profile = await requireProfile(context.userId);
+    assertRole(profile, ["administrador"]);
+    const sql = await getSql();
+    await ensureCreditNotes(sql);
+    const name = data.clientName.trim();
+    const nf = data.nfNumber.trim();
+    const found = await sql<{ id: number }>`
+      select id from clients where lower(name) = ${name.toLowerCase()} order by id limit 1
+    `;
+    await sql`
+      insert into hubgov_ledger (client_id, purchase_order_id, kind, amount, nf_number, notes, created_by)
+      values (${found[0]?.id ?? null}, null, 'generated', ${data.amount}, ${nf}, ${name}, ${context.userId})
+    `;
+    return { ok: true };
   });
 
 export const creditSummary = createServerFn({ method: "GET" })

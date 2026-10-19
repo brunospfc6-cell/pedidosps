@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { BrandLogo } from "@/components/brand-logo";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
+import { authClient, authEnabled } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { ProfileContext } from "@/lib/profile-context";
 import { getMyProfile } from "@/lib/server/profile";
@@ -17,6 +18,31 @@ function AppLayout() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [denied, setDenied] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [recheck, setRecheck] = useState<"idle" | "done">("idle");
+  const seenUser = useRef(false);
+  if (user) seenUser.current = true;
+
+  useEffect(() => {
+    if (!authEnabled || isPending || user) {
+      setRecheck("idle");
+      return;
+    }
+    if (!seenUser.current) {
+      setRecheck("done");
+      return;
+    }
+    let cancel = false;
+    setRecheck("idle");
+    const timer = window.setTimeout(() => {
+      authClient.getSession().finally(() => {
+        if (!cancel) setRecheck("done");
+      });
+    }, 400);
+    return () => {
+      cancel = true;
+      window.clearTimeout(timer);
+    };
+  }, [isPending, user]);
 
   useEffect(() => {
     if (isPending) return;
@@ -33,7 +59,9 @@ function AppLayout() {
       .finally(() => setReady(true));
   }, [user, isPending]);
 
-  if (isPending || !ready) {
+  const holdSession = authEnabled && !isPending && !user && seenUser.current && recheck !== "done";
+
+  if (isPending || holdSession || !ready) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="h-10 w-40 animate-pulse rounded-md bg-muted" />

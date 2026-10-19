@@ -71,7 +71,7 @@ function esc(s) {
     .replace(/'/g, "&#39;");
 }
 
-async function api(path, opts = {}) {
+async function api(path, opts = {}, attempt = 0) {
   const isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
   const headers = isForm ? { ...(opts.headers || {}) } : { "Content-Type": "application/json", ...(opts.headers || {}) };
   const res = await fetch(path, {
@@ -80,6 +80,10 @@ async function api(path, opts = {}) {
     ...opts,
     body: opts.body ? (isForm ? opts.body : JSON.stringify(opts.body)) : undefined,
   });
+  if (res.status === 401 && attempt === 0 && !String(path).includes("/api/auth/login")) {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return api(path, opts, 1);
+  }
   if (res.status === 401) {
     me = null;
     if (!location.hash.startsWith("#/login")) location.hash = "#/login";

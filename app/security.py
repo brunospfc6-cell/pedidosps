@@ -54,6 +54,19 @@ def read_session(token: str) -> Optional[int]:
         return None
 
 
+def session_remaining(token: str) -> Optional[int]:
+    """Segundos até a sessão expirar. None se o cookie for inválido."""
+    try:
+        payload, sig = token.rsplit(".", 1)
+        expected = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            return None
+        _uid, exp = payload.split(":")
+        return int(exp) - int(time.time())
+    except Exception:
+        return None
+
+
 def current_user(request: Request) -> dict:
     token = request.cookies.get(COOKIE)
     if not token:

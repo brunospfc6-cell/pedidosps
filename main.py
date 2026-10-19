@@ -11,15 +11,25 @@ from fastapi.responses import FileResponse, JSONResponse, Response as FastRespon
 from fastapi.staticfiles import StaticFiles
 from openpyxl import Workbook
 from openpyxl.styles import Font
+from starlette.middleware.base import BaseHTTPMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app import db
 from app.calc import compute_odc
-from app.config import HOST, PORT, ROLE_LABEL
+from app.config import HOST, PORT, ROLE_LABEL, SESSION_HOURS
 from app.export_doc import as_word, odc_html, sales_html
 from app.pricelist import get_meta as catalog_meta, list_imports, save_upload_and_apply
 from app.seed import seed_if_empty
-from app.security import clear_session, current_user, hash_password, set_session_cookie, verify_password
+from app.security import (
+    COOKIE,
+    clear_session,
+    current_user,
+    hash_password,
+    read_session,
+    session_remaining,
+    set_session_cookie,
+    verify_password,
+)
 from app import services
 from app import updater
 
@@ -37,6 +47,27 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Pro-Systems Compras e Vendas", lifespan=lifespan)
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
+
+class SlidingSessionMiddleware(BaseHTTPMiddleware):
+    """Quem continua usando o sistema ganha mais prazo. Quem fica parado, a sessão expira."""
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/auth/logout") or response.status_code >= 400:
+            return response
+        token = request.cookies.get(COOKIE)
+        if not token:
+            return response
+        remaining = session_remaining(token)
+        if remaining is not None and 0 < remaining < SESSION_HOURS * 1800:
+            uid = read_session(token)
+            if uid:
+                set_session_cookie(response, uid)
+        return response
+
+
+app.add_middleware(SlidingSessionMiddleware)
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 

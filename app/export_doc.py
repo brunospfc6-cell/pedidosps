@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import html
 import json
+import re
 from pathlib import Path
 
 from .config import COMPANY, ROOT, SALE_KIND_LABEL, SIGNATURE, STATUS_LABEL
@@ -36,6 +37,27 @@ def _brl(v) -> str:
 
 def _usd(v) -> str:
     return "US$ " + _fmt(v)
+
+
+def _prazo_dias(order) -> str:
+    t = (order.get("payment_terms") or "").strip()
+    d = order.get("payment_term_days")
+    n = None
+    if t:
+        m = re.fullmatch(r"(\d+)\s*(dias?)?", t, flags=re.IGNORECASE)
+        if m:
+            n = int(m.group(1))
+    if n is None and d not in (None, ""):
+        try:
+            n = int(d)
+        except (TypeError, ValueError):
+            n = None
+        if n is not None and t and t.lower() not in {str(n), f"{n} dias", f"{n} dia"}:
+            return t
+    if n is None:
+        return t or "—"
+    palavra = "dia" if n == 1 else "dias"
+    return f"{n} ({_inteiro(n)}) {palavra}"
 
 
 def _prazo(order) -> str:
@@ -304,10 +326,11 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
           </tr>
         </tbody>
       </table>
+      {f'<div class="box"><p>{_esc((order.get("notes") or "").strip())}</p></div>' if (order.get("notes") or "").strip() else ""}
       <div class="box">
         {"" if order.get("client_type") != "governo" else f"<p>Crédito Pars gerado ({_fmt(order['hubgov_credit_pct'])}% sobre o valor após desconto): {_brl(order['credit_generated'])}</p>"}
         <p>Entrega das Licenças: {"Imediato" if order.get("license_delivery") == "imediato" else "Ativação em " + _date(order.get("activation_date"))}</p>
-        <p>Prazo de Pagamento: {_esc(_prazo(order))}</p>
+        <p>Prazo de Pagamento: {_esc(_prazo_dias(order))}</p>
       </div>
       <h2>3. Cliente</h2>
       <div class="box">
@@ -327,12 +350,11 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
       </div>
       <h2>Observações</h2>
       <div class="box">
-        {f"<p>{_esc(order.get('notes'))}</p>" if (order.get("notes") or "").strip() else ""}
-        <p><strong>Memória de cálculo</strong></p>
-        <p>Dólar do dia: R$ {_fmt(rate, 4)}</p>
         <p>Valor do pedido em dólar: {_usd(order.get("list_total_usd"))}</p>
-        <p><strong>Desconto por produto</strong></p>
-        {"".join(_disc_lines(order, items, rate))}
+        <p>Dólar do dia: R$ {_fmt(rate, 4)}</p>
+        <p>Valor do pedido em reais: {_brl(list_brl)}</p>
+        <p>Valor total do Desconto em reais: {_brl(disc_amt)}</p>
+        <p>Valor total de créditos utilizados: {_brl(credit)}</p>
       </div>
       {_signature()}
     </div>

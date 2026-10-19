@@ -13,6 +13,31 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&" + "quot;");
 }
 
+function diasPorExtenso(n: number) {
+  const unidades = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove"];
+  const dez = ["dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
+  const dezenas = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"];
+  const centenas = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos", "seiscentos", "setecentos", "oitocentos", "novecentos"];
+  const abs = Math.abs(Math.trunc(n));
+  if (abs === 0) return "zero";
+  if (abs === 100) return "cem";
+  const c = Math.trunc(abs / 100);
+  const r = abs % 100;
+  let resto = "";
+  if (r < 10) resto = unidades[r];
+  else if (r < 20) resto = dez[r - 10];
+  else resto = dezenas[Math.trunc(r / 10)] + (r % 10 ? ` e ${unidades[r % 10]}` : "");
+  if (c === 0) return resto;
+  if (r === 0) return centenas[c];
+  return `${centenas[c]} e ${resto}`;
+}
+
+function prazoDias(days: number | null | undefined) {
+  if (days == null || Number.isNaN(days)) return "—";
+  const n = Math.trunc(days);
+  return `${n} (${diasPorExtenso(n)}) ${n === 1 ? "dia" : "dias"}`;
+}
+
 function creditUsesLabel(order: PurchaseOrder) {
   const lines = order.creditUses?.filter((line) => line.nf || line.amount);
   if (lines?.length) {
@@ -149,13 +174,10 @@ export function odcDocumentHtml(order: PurchaseOrder, opts?: { includeStatus?: b
         <p>Crédito utilizado${creditUsesLabel(order)}: ${brl(order.creditUsed)}</p>
         <p><strong>Valor Final: ${brl(order.netTotalBrl)}</strong></p>
       </div>
+      ${order.notes?.trim() ? `<div class="box"><p>${escapeHtml(order.notes.trim())}</p></div>` : ""}
       <div class="box">
-        <p>Câmbio do Dia: R$ ${order.dollarRate.toFixed(4)}</p>
-        <p>Lista BRL: ${brl(order.listTotalBrl)}</p>
-        <p>Desconto ${order.discountPct}%: − ${brl(order.discountAmount)}</p>
-        <p>Crédito HubGov gerado (${order.hubgovCreditPct}% sobre lista): ${brl(order.creditGenerated)}</p>
         <p>Entrega das Licenças: ${order.licenseDelivery === "imediato" ? "Imediato" : `Ativação em ${formatDateBR(order.activationDate)}`}</p>
-        <p>Prazo de Pagamento: ${order.paymentTermDays} dias</p>
+        <p>Prazo de Pagamento: ${prazoDias(order.paymentTermDays)}</p>
         ${special}
       </div>
       <h2>3. Cliente</h2>
@@ -173,6 +195,14 @@ export function odcDocumentHtml(order: PurchaseOrder, opts?: { includeStatus?: b
         <p>${escapeHtml(COMPANY.addressLine2)}</p>
         <p>CNPJ: ${COMPANY.cnpj} · Inscrição Estadual: ${COMPANY.ie}</p>
         <p>Fone: ${COMPANY.phone}</p>
+      </div>
+      <h2>Observações</h2>
+      <div class="box">
+        <p>Valor do pedido em dólar: ${usd(order.listTotalUsd)}</p>
+        <p>Dólar do dia: R$ ${order.dollarRate.toFixed(4)}</p>
+        <p>Valor do pedido em reais: ${brl(order.listTotalBrl)}</p>
+        <p>Valor total do Desconto em reais: ${brl(order.discountAmount)}</p>
+        <p>Valor total de créditos utilizados: ${brl(order.creditUsed)}</p>
       </div>
       ${signatureBlockHtml()}
     </div>

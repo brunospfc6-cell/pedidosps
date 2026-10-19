@@ -286,6 +286,9 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         else ""
     )
     nf = _credit_detail(order)
+    extenso = reais_extenso(net)
+    if extenso:
+        extenso = extenso[0].upper() + extenso[1:]
     return f"""
     <div>
       {_header(f"Ordem de Compra {order['number']}", " · ".join(bits))}
@@ -299,7 +302,7 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
       <div class="valor-compra">
         <p class="lbl">Valor da compra (após descontos e créditos)</p>
         <p class="hero">{_brl(net)}</p>
-        <p class="ext">Por extenso: {_esc(reais_extenso(net))}</p>
+        <p class="ext">{_esc(extenso)}</p>
       </div>
       <table>
         <thead><tr>
@@ -350,11 +353,11 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
       </div>
       <h2>Observações</h2>
       <div class="box">
-        <p>Valor do pedido em dólar: {_usd(order.get("list_total_usd"))}</p>
-        <p>Dólar do dia: R$ {_fmt(rate, 4)}</p>
-        <p>Valor do pedido em reais: {_brl(list_brl)}</p>
-        <p>Valor total do Desconto em reais: {_brl(disc_amt)}</p>
-        <p>Valor total de créditos utilizados: {_brl(credit)}</p>
+        <p>Valor Do Pedido Em Dólar: {_usd(order.get("list_total_usd"))}</p>
+        <p>Dólar Do Dia: R$ {_fmt(rate, 4)}</p>
+        <p>Valor Do Pedido Em Reais: {_brl(list_brl)}</p>
+        <p>Valor Total Do Desconto Em Reais: {_brl(disc_amt)}</p>
+        <p>Valor Total De Créditos Utilizados: {_brl(credit)}</p>
       </div>
       {_signature()}
     </div>

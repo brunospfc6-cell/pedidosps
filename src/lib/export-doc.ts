@@ -198,11 +198,11 @@ export function odcDocumentHtml(order: PurchaseOrder, opts?: { includeStatus?: b
       </div>
       <h2>Observações</h2>
       <div class="box">
-        <p>Valor do pedido em dólar: ${usd(order.listTotalUsd)}</p>
-        <p>Dólar do dia: R$ ${order.dollarRate.toFixed(4)}</p>
-        <p>Valor do pedido em reais: ${brl(order.listTotalBrl)}</p>
-        <p>Valor total do Desconto em reais: ${brl(order.discountAmount)}</p>
-        <p>Valor total de créditos utilizados: ${brl(order.creditUsed)}</p>
+        <p>Valor Do Pedido Em Dólar: ${usd(order.listTotalUsd)}</p>
+        <p>Dólar Do Dia: R$ ${order.dollarRate.toFixed(4)}</p>
+        <p>Valor Do Pedido Em Reais: ${brl(order.listTotalBrl)}</p>
+        <p>Valor Total Do Desconto Em Reais: ${brl(order.discountAmount)}</p>
+        <p>Valor Total De Créditos Utilizados: ${brl(order.creditUsed)}</p>
       </div>
       ${signatureBlockHtml()}
     </div>

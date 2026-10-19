@@ -485,11 +485,13 @@ function drawOdc(o, suppliers, products, credits) {
                  <div class="field"><label>NF que gerou o crédito</label><input name="generated_nf" placeholder="Nota fiscal desta venda" value="${esc(o.generated_nf || o.hubgov?.nf_number || "")}"></div>`
               : `<input type="hidden" name="hubgov_credit_pct" value="0">`
           }
-          <div class="field"><label>Valor do Crédito Utilizado (R$)</label><input name="credit_used" type="number" step="0.01" value="${o.credit_used || 0}"></div>
-          <div class="field"><label>NF do crédito utilizado</label>
-            <input name="credit_nf" list="nfs-disp" value="${esc(o.credit_nf || "")}">
+          <div class="field" style="grid-column:1/-1">
+            <label>Crédito utilizado</label>
+            <p class="muted" style="margin:0 0 8px">Escolha uma ou mais notas e informe o valor de cada uma.</p>
+            <div id="credit-lines">${creditUsesOf(o).map((line) => creditLineHtml(line)).join("")}</div>
             <datalist id="nfs-disp">${(credits.available || []).map((c) => `<option value="${esc(c.nf)}">${esc(c.nf)} · ${brl(c.remaining)}</option>`).join("")}</datalist>
-            <p class="muted" style="margin:4px 0 0">Disponível para uso: ${brl(credits.summary?.remaining || 0)}${(credits.summary?.pending || 0) > 0 ? ` · Pendente de habilitação: ${brl(credits.summary.pending)}` : ""}</p>
+            ${locked ? "" : `<button type="button" class="btn outline sm" id="add-credit">Adicionar NF</button>`}
+            <p class="muted" style="margin:8px 0 0">Disponível para uso: ${brl(credits.summary?.remaining || 0)}${(credits.summary?.pending || 0) > 0 ? ` · Pendente de habilitação: ${brl(credits.summary.pending)}` : ""}</p>
           </div>
         </div>
         <div id="totais"></div>
@@ -581,6 +583,23 @@ function drawOdc(o, suppliers, products, credits) {
     tb.insertAdjacentHTML("beforeend", itemRow({}, $("#prorata")?.checked, Number(form.dollar_rate.value || 0), true, form.discount_pct.value));
     attachPickers(tb.lastElementChild, products, form.sale_kind.value);
   });
+  $("#add-credit")?.addEventListener("click", () => {
+    $("#credit-lines")?.insertAdjacentHTML("beforeend", creditLineHtml({}));
+  });
+  $("#credit-lines")?.addEventListener("click", (e) => {
+    if (!e.target.closest(".c-rm")) return;
+    const rows = $$("#credit-lines .credit-line");
+    if (rows.length <= 1) {
+      const nf = $(".c-nf", rows[0]);
+      const amt = $(".c-amt", rows[0]);
+      if (nf) nf.value = "";
+      if (amt) amt.value = "";
+    } else {
+      e.target.closest(".credit-line")?.remove();
+    }
+    refreshTotals();
+  });
+  $("#credit-lines")?.addEventListener("input", refreshTotals);
   $("#items")?.addEventListener("click", (e) => {
     const b = e.target.closest(".rm");
     if (!b) return;
@@ -635,8 +654,9 @@ function drawOdc(o, suppliers, products, credits) {
       activation_date: form.activation_date?.value || null,
       payment_terms: form.payment_terms.value,
       prorata: $("#prorata")?.checked ? 1 : 0,
-      credit_used: Number(form.credit_used?.value || 0),
-      credit_nf: form.credit_nf?.value,
+      credit_used: creditTotal(),
+      credit_nf: readCreditUses().map((l) => l.nf).filter(Boolean).join("; "),
+      credit_uses: readCreditUses(),
       generated_nf: form.generated_nf?.value,
       client_csn: form.client_csn.value,
       client_name: form.client_name.value,
@@ -720,10 +740,10 @@ function drawOdc(o, suppliers, products, credits) {
           discount_pct: Number(form.discount_pct.value || 0),
           client_type: o.client_type,
           hubgov_credit_pct: Number(form.hubgov_credit_pct?.value || 0),
-          credit_used: Number(form.credit_used?.value || 0),
+          credit_used: creditTotal(),
         },
       });
-      const used = Number(form.credit_used?.value || 0);
+      const used = creditTotal();
       $("#totais").innerHTML = `
         <div class="valor-compra">
           <small>Valor da compra · após descontos e créditos</small>
@@ -742,6 +762,41 @@ function drawOdc(o, suppliers, products, credits) {
         </div>`;
     } catch {}
   }
+}
+
+function creditUsesOf(o) {
+  let lines = o.credit_uses;
+  if (typeof lines === "string" && lines.trim()) {
+    try {
+      lines = JSON.parse(lines);
+    } catch {
+      lines = null;
+    }
+  }
+  if (Array.isArray(lines) && lines.length) return lines;
+  if (Number(o.credit_used) > 0 || o.credit_nf) return [{ nf: o.credit_nf || "", amount: o.credit_used || 0 }];
+  return [{ nf: "", amount: "" }];
+}
+
+function creditLineHtml(line = {}) {
+  return `<div class="credit-line" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <input class="c-nf" list="nfs-disp" placeholder="NF do crédito" value="${esc(line.nf || "")}" style="flex:1">
+    <input class="c-amt" type="number" step="0.01" min="0" placeholder="Valor (R$)" value="${line.amount ?? ""}" style="width:160px">
+    <button type="button" class="btn ghost sm c-rm">Remover</button>
+  </div>`;
+}
+
+function readCreditUses() {
+  return $$("#credit-lines .credit-line")
+    .map((row) => ({
+      nf: ($(".c-nf", row)?.value || "").trim(),
+      amount: Number($(".c-amt", row)?.value || 0),
+    }))
+    .filter((line) => line.nf || line.amount > 0);
+}
+
+function creditTotal() {
+  return readCreditUses().reduce((sum, line) => sum + line.amount, 0);
 }
 
 function itemRow(it = {}, prorata = false, rate = 0, canRemove = true, fallbackDisc = 0) {

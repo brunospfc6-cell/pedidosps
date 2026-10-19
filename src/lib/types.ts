@@ -79,6 +79,7 @@ export type PurchaseOrder = {
   paymentTermDays: number;
   creditUsed: number;
   creditNf: string | null;
+  creditUses?: { nf: string; amount: number }[];
   specialCondition: string | null;
   specialApprovedBy: string | null;
   signatureData: string | null;

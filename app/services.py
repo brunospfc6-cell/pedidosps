@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import date
 
@@ -73,17 +74,43 @@ def upsert_client(conn, user_id: int, data: dict) -> int:
     return cur.lastrowid
 
 
+def apply_credit_lines(data: dict) -> list[dict]:
+    """Soma as NFs informadas. Pedidos antigos, sem a lista, continuam com um único valor."""
+    raw = data.get("credit_uses")
+    lines = []
+    if isinstance(raw, list):
+        for row in raw:
+            if not isinstance(row, dict):
+                continue
+            nf = str(row.get("nf") or "").strip()
+            try:
+                amount = round(float(row.get("amount") or 0), 2)
+            except (TypeError, ValueError):
+                amount = 0.0
+            if not nf and amount <= 0:
+                continue
+            lines.append({"nf": nf, "amount": amount})
+    if not lines and float(data.get("credit_used") or 0) > 0:
+        lines = [{"nf": str(data.get("credit_nf") or "").strip(), "amount": round(float(data.get("credit_used") or 0), 2)}]
+    data["credit_uses"] = lines
+    data["credit_used"] = round(sum(line["amount"] for line in lines), 2)
+    data["credit_nf"] = "; ".join(line["nf"] for line in lines if line["nf"]) or None
+    return lines
+
+
 def validate_odc(data: dict, calc: dict, finalize: bool, conn=None):
     if finalize and calc["below_minimum"]:
         raise HTTPException(400, f"O valor líquido não pode ser inferior a R$ {MIN_NET_BRL:.2f} ao utilizar crédito Pars.")
     if data.get("client_type") == "governo" and finalize and float(data.get("hubgov_credit_pct") or 0) < 8:
         raise HTTPException(400, "Pedidos de governo devem gerar no mínimo 8% de crédito Pars.")
     used = float(data.get("credit_used") or 0)
+    uses = data.get("credit_uses") or []
+    if used > 0 and any(not line.get("nf") for line in uses):
+        raise HTTPException(400, "Informe a nota fiscal de cada crédito utilizado.")
     if used > 0 and not (data.get("credit_nf") or "").strip():
         raise HTTPException(400, "Informe a nota fiscal que gerou o crédito Pars utilizado.")
     if used > 0 and conn is not None:
         remaining = credit_summary(conn)["remaining"]
-        # when editing an existing ODC, its previous use is already in the ledger until we replace it
         odc_id = data.get("id")
         if odc_id:
             prev = conn.execute(
@@ -97,6 +124,29 @@ def validate_odc(data: dict, calc: dict, finalize: bool, conn=None):
                 f"Crédito insuficiente. Disponível para uso: R$ {remaining:,.2f} "
                 "(créditos recém-gerados precisam ser habilitados pelo administrador).".replace(",", "X").replace(".", ",").replace("X", "."),
             )
+        balances = {
+            r["nf_number"]: float(r["rem"] or 0)
+            for r in conn.execute(
+                """SELECT nf_number,
+                          SUM(CASE WHEN kind='generated' THEN amount ELSE -amount END) AS rem
+                   FROM hubgov_ledger
+                   WHERE nf_number IS NOT NULL AND nf_number != ''
+                   GROUP BY nf_number"""
+            )
+        }
+        if odc_id:
+            for prev_line in conn.execute(
+                "SELECT nf_number, amount FROM hubgov_ledger WHERE purchase_order_id=? AND kind='used'",
+                (odc_id,),
+            ):
+                if prev_line["nf_number"]:
+                    balances[prev_line["nf_number"]] = balances.get(prev_line["nf_number"], 0) + float(prev_line["amount"] or 0)
+        by_nf: dict[str, float] = {}
+        for line in uses:
+            by_nf[line["nf"]] = by_nf.get(line["nf"], 0) + float(line["amount"])
+        for nf, amount in by_nf.items():
+            if nf in balances and amount > balances[nf] + 0.009:
+                raise HTTPException(400, f"Saldo insuficiente na NF {nf}.")
     if data.get("license_delivery") == "agendada" and not data.get("activation_date"):
         raise HTTPException(400, "Informe a data de ativação das licenças.")
     if data.get("sale_kind") == "renovacao" and not (data.get("renewal_contracts") or "").strip():
@@ -131,6 +181,19 @@ def odc_with_items(conn, odc_id: int) -> dict | None:
             (odc_id,),
         )
     )
+    raw = order.get("credit_uses")
+    parsed = None
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            parsed = None
+    if isinstance(parsed, list) and parsed:
+        order["credit_uses"] = parsed
+    elif float(order.get("credit_used") or 0) > 0 or order.get("credit_nf"):
+        order["credit_uses"] = [{"nf": order.get("credit_nf") or "", "amount": float(order.get("credit_used") or 0)}]
+    else:
+        order["credit_uses"] = []
     return order
 
 
@@ -157,6 +220,7 @@ def save_odc(conn, user: dict, data: dict) -> dict:
     if data.get("client_type") == "governo" and hub <= 0:
         hub = DEFAULT_HUBGOV_PCT
         data["hubgov_credit_pct"] = hub
+    apply_credit_lines(data)
     calc = compute_odc(
         items,
         data.get("dollar_rate"),
@@ -189,7 +253,7 @@ def save_odc(conn, user: dict, data: dict) -> dict:
                order_date=?, supplier_id=?, client_type=?, sale_kind=?, status=?,
                dollar_rate=?, discount_pct=?, hubgov_credit_pct=?, license_delivery=?,
                activation_date=?, payment_term_days=?, payment_terms=?, prorata=?,
-               credit_used=?, credit_nf=?, generated_nf=?,
+               credit_used=?, credit_nf=?, credit_uses=?, generated_nf=?,
                special_condition=?, special_approved_by=?, client_id=?, client_csn=?,
                client_name=?, client_document=?, client_email=?, client_manager=?,
                client_phone=?, renewal_contracts=?, notes=?,
@@ -201,7 +265,9 @@ def save_odc(conn, user: dict, data: dict) -> dict:
                 data["dollar_rate"], data.get("discount_pct") or 0, hub,
                 data.get("license_delivery") or "imediato", data.get("activation_date"),
                 days, terms, prorata, data.get("credit_used") or 0,
-                data.get("credit_nf"), generated_nf, data.get("special_condition"), data.get("special_approved_by"),
+                data.get("credit_nf"),
+                json.dumps(data.get("credit_uses") or [], ensure_ascii=False) if data.get("credit_uses") else None,
+                generated_nf, data.get("special_condition"), data.get("special_approved_by"),
                 client_id, data["client_csn"].strip(), data["client_name"].strip(),
                 data["client_document"].strip(), data.get("client_email"), data.get("client_manager"),
                 data.get("client_phone"), data.get("renewal_contracts"), data.get("notes"),
@@ -216,17 +282,19 @@ def save_odc(conn, user: dict, data: dict) -> dict:
             """INSERT INTO purchase_orders (
                  number, seq, order_date, supplier_id, client_type, sale_kind, status,
                  dollar_rate, discount_pct, hubgov_credit_pct, license_delivery, activation_date,
-                 payment_term_days, payment_terms, prorata, credit_used, credit_nf, generated_nf, special_condition, special_approved_by,
+                 payment_term_days, payment_terms, prorata, credit_used, credit_nf, credit_uses, generated_nf, special_condition, special_approved_by,
                  client_id, client_csn, client_name, client_document, client_email, client_manager,
                  client_phone, renewal_contracts, notes, list_total_usd, list_total_brl,
                  discount_amount, net_total_brl, credit_generated, created_by
-               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 number, seq, data["order_date"], data["supplier_id"], data["client_type"],
                 data["sale_kind"], status, data["dollar_rate"], data.get("discount_pct") or 0, hub,
                 data.get("license_delivery") or "imediato", data.get("activation_date"),
                 days, terms, prorata, data.get("credit_used") or 0,
-                data.get("credit_nf"), generated_nf, data.get("special_condition"), data.get("special_approved_by"),
+                data.get("credit_nf"),
+                json.dumps(data.get("credit_uses") or [], ensure_ascii=False) if data.get("credit_uses") else None,
+                generated_nf, data.get("special_condition"), data.get("special_approved_by"),
                 client_id, data["client_csn"].strip(), data["client_name"].strip(),
                 data["client_document"].strip(), data.get("client_email"), data.get("client_manager"),
                 data.get("client_phone"), data.get("renewal_contracts"), data.get("notes"),
@@ -270,11 +338,15 @@ def save_odc(conn, user: dict, data: dict) -> dict:
             (client_id, odc_id, calc["credit_generated"], nf, enabled, user["id"]),
         )
     if finalize and float(data.get("credit_used") or 0) > 0:
-        conn.execute(
-            """INSERT INTO hubgov_ledger (client_id, purchase_order_id, kind, amount, nf_number, enabled, created_by)
-               VALUES (?,?, 'used', ?, ?, 1, ?)""",
-            (client_id, odc_id, data.get("credit_used") or 0, data.get("credit_nf"), user["id"]),
-        )
+        uses = data.get("credit_uses") or [{"nf": data.get("credit_nf"), "amount": data.get("credit_used") or 0}]
+        for line in uses:
+            if float(line.get("amount") or 0) <= 0:
+                continue
+            conn.execute(
+                """INSERT INTO hubgov_ledger (client_id, purchase_order_id, kind, amount, nf_number, enabled, created_by)
+                   VALUES (?,?, 'used', ?, ?, 1, ?)""",
+                (client_id, odc_id, line.get("amount") or 0, line.get("nf"), user["id"]),
+            )
     order = odc_with_items(conn, odc_id)
     sync_sales_from_odc(conn, order, old_rate)
     return order

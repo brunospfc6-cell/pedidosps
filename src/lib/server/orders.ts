@@ -30,6 +30,9 @@ const odcPayload = z.object({
   paymentTermDays: z.number().int().min(0),
   creditUsed: z.number().min(0),
   creditNf: z.string().nullable().optional(),
+  creditUses: z
+    .array(z.object({ nf: z.string(), amount: z.number().min(0) }))
+    .optional(),
   specialCondition: z.string().nullable().optional(),
   specialApprovedBy: z.string().nullable().optional(),
   signatureData: z.string().nullable().optional(),
@@ -51,6 +54,7 @@ let orderSchemaReady: Promise<void> | null = null;
 async function ensureOrderSchema(sql: Sql) {
   if (!orderSchemaReady) {
     orderSchemaReady = (async () => {
+      await sql.query(`alter table purchase_orders add column if not exists credit_uses text`);
       await sql.query(`alter table purchase_orders drop constraint if exists purchase_orders_status_check`);
       await sql.query(`
         alter table purchase_orders add constraint purchase_orders_status_check
@@ -113,6 +117,19 @@ async function upsertClientFromOrder(
   return rows[0].id;
 }
 
+function applyCreditLines(data: z.infer<typeof odcPayload>): z.infer<typeof odcPayload> {
+  const fromList = (data.creditUses ?? [])
+    .map((line) => ({ nf: line.nf.trim(), amount: Math.round(line.amount * 100) / 100 }))
+    .filter((line) => line.nf || line.amount > 0);
+  const lines =
+    fromList.length || data.creditUsed <= 0
+      ? fromList
+      : [{ nf: (data.creditNf ?? "").trim(), amount: data.creditUsed }];
+  const creditUsed = Math.round(lines.reduce((sum, line) => sum + line.amount, 0) * 100) / 100;
+  const creditNf = lines.map((line) => line.nf).filter(Boolean).join("; ") || null;
+  return { ...data, creditUses: lines, creditUsed, creditNf };
+}
+
 function totalsFrom(data: z.infer<typeof odcPayload>) {
   const calc = computeOdc({
     items: data.items,
@@ -132,6 +149,9 @@ function totalsFrom(data: z.infer<typeof odcPayload>) {
   }
   if (data.clientType === "governo" && data.finalize && data.hubgovCreditPct < 8) {
     throw new AppError("Pedidos de governo devem gerar no mínimo 8% de crédito HubGov.");
+  }
+  if (data.creditUsed > 0 && data.creditUses?.some((line) => !line.nf.trim())) {
+    throw new AppError("Informe a nota fiscal de cada crédito utilizado.");
   }
   if (data.creditUsed > 0 && !data.creditNf?.trim()) {
     throw new AppError("Informe a nota fiscal que gerou o crédito HubGov utilizado.");
@@ -210,6 +230,7 @@ export const savePurchaseOrder = createServerFn({ method: "POST" })
     assertRole(profile, ["administrador", "vendedor", "diretor"]);
     const sql = await getSql();
     await ensureOrderSchema(sql);
+    Object.assign(data, applyCreditLines(data));
     const calc = totalsFrom(data);
     const clientId = await upsertClientFromOrder(sql, context.userId, data);
     const status = data.finalize ? "pendente_envio" : "rascunho";
@@ -262,6 +283,7 @@ export const savePurchaseOrder = createServerFn({ method: "POST" })
           payment_term_days = ${data.paymentTermDays},
           credit_used = ${data.creditUsed},
           credit_nf = ${data.creditNf?.trim() || null},
+          credit_uses = ${data.creditUses?.length ? JSON.stringify(data.creditUses) : null},
           special_condition = ${data.specialCondition?.trim() || null},
           special_approved_by = ${data.specialApprovedBy?.trim() || null},
           signature_data = ${data.signatureData || null},
@@ -293,7 +315,7 @@ export const savePurchaseOrder = createServerFn({ method: "POST" })
       insert into purchase_orders (
         number, seq, order_date, supplier_id, client_type, sale_kind, status,
         dollar_rate, discount_pct, hubgov_credit_pct, license_delivery, activation_date,
-        payment_term_days, credit_used, credit_nf, special_condition, special_approved_by,
+        payment_term_days, credit_used, credit_nf, credit_uses, special_condition, special_approved_by,
         signature_data, signed_at, signed_name, client_id, client_csn, client_name,
         client_document, client_email, client_manager, client_phone, renewal_contracts,
         notes, list_total_usd, list_total_brl, discount_amount, net_total_brl,
@@ -304,6 +326,7 @@ export const savePurchaseOrder = createServerFn({ method: "POST" })
         ${data.licenseDelivery},
         ${data.licenseDelivery === "agendada" ? data.activationDate : null},
         ${data.paymentTermDays}, ${data.creditUsed}, ${data.creditNf?.trim() || null},
+        ${data.creditUses?.length ? JSON.stringify(data.creditUses) : null},
         ${data.specialCondition?.trim() || null}, ${data.specialApprovedBy?.trim() || null},
         ${data.signatureData || null}, ${signedAt}, ${data.signedName?.trim() || null},
         ${clientId}, ${data.clientCsn.trim()}, ${data.clientName.trim()},
@@ -350,10 +373,16 @@ export const markOdcSent = createServerFn({ method: "POST" })
     `;
 
     if (order.creditUsed > 0) {
-      await sql`
-        insert into hubgov_ledger (client_id, purchase_order_id, kind, amount, nf_number, created_by)
-        values (${order.clientId}, ${order.id}, 'used', ${order.creditUsed}, ${order.creditNf}, ${context.userId})
-      `;
+      const lines = order.creditUses?.length
+        ? order.creditUses
+        : [{ nf: order.creditNf ?? "", amount: order.creditUsed }];
+      for (const line of lines) {
+        if (line.amount <= 0) continue;
+        await sql`
+          insert into hubgov_ledger (client_id, purchase_order_id, kind, amount, nf_number, created_by)
+          values (${order.clientId}, ${order.id}, 'used', ${line.amount}, ${line.nf || null}, ${context.userId})
+        `;
+      }
     }
     if (order.clientType === "governo" && order.creditGenerated > 0) {
       const nf = `HUB-${order.number}`;

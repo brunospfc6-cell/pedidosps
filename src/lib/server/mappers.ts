@@ -68,6 +68,22 @@ export function mapOdcItem(r: Record<string, unknown>): OdcItem {
   };
 }
 
+function parseCreditUses(raw: unknown): { nf: string; amount: number }[] | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    return parsed
+      .map((row) => {
+        const item = row as { nf?: unknown; amount?: unknown };
+        return { nf: String(item.nf ?? "").trim(), amount: num(item.amount) };
+      })
+      .filter((row) => row.nf || row.amount > 0);
+  } catch {
+    return undefined;
+  }
+}
+
 export function mapPurchaseOrder(
   r: Record<string, unknown>,
   items: OdcItem[] = [],
@@ -90,6 +106,7 @@ export function mapPurchaseOrder(
     paymentTermDays: num(r.payment_term_days),
     creditUsed: num(r.credit_used),
     creditNf: r.credit_nf ? String(r.credit_nf) : null,
+    creditUses: parseCreditUses(r.credit_uses),
     specialCondition: r.special_condition ? String(r.special_condition) : null,
     specialApprovedBy: r.special_approved_by ? String(r.special_approved_by) : null,
     signatureData: r.signature_data ? String(r.signature_data) : null,

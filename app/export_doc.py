@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import html
+import json
 from pathlib import Path
 
 from .config import COMPANY, ROOT, SALE_KIND_LABEL, SIGNATURE, STATUS_LABEL
@@ -212,6 +213,27 @@ def _disc_lines(order, items, rate) -> list[str]:
     return out
 
 
+def _credit_detail(order) -> str:
+    raw = order.get("credit_uses")
+    lines = raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            lines = json.loads(raw)
+        except ValueError:
+            lines = None
+    if isinstance(lines, list) and lines:
+        parts = [
+            f"NF {_esc(line.get('nf'))}: {_brl(line.get('amount'))}"
+            for line in lines
+            if line.get("nf") or line.get("amount")
+        ]
+        if parts:
+            return " (" + "; ".join(parts) + ")"
+    if order.get("credit_nf"):
+        return f" (NF {_esc(order.get('credit_nf'))})"
+    return ""
+
+
 def odc_html(order: dict, items: list[dict], include_status: bool = False) -> str:
     rate = float(order.get("dollar_rate") or 0)
     list_brl = float(order.get("list_total_brl") or 0)
@@ -241,7 +263,7 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         if order.get("renewal_contracts")
         else ""
     )
-    nf = f" (NF {_esc(order.get('credit_nf'))})" if order.get("credit_nf") else ""
+    nf = _credit_detail(order)
     return f"""
     <div>
       {_header(f"Ordem de Compra {order['number']}", " · ".join(bits))}

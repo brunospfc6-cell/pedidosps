@@ -40,7 +40,7 @@ type FormState = {
   activationDate: string;
   paymentTermDays: number;
   creditUsed: number;
-  creditNf: string;
+  creditUses: { nf: string; amount: number }[];
   specialCondition: string;
   specialApprovedBy: string;
   clientCsn: string;
@@ -74,7 +74,11 @@ function fromOrder(o: PurchaseOrder): FormState {
     activationDate: o.activationDate ?? "",
     paymentTermDays: o.paymentTermDays,
     creditUsed: o.creditUsed,
-    creditNf: o.creditNf ?? "",
+    creditUses: o.creditUses?.length
+      ? o.creditUses
+      : o.creditUsed > 0 || o.creditNf
+        ? [{ nf: o.creditNf ?? "", amount: o.creditUsed }]
+        : [{ nf: "", amount: 0 }],
     specialCondition: o.specialCondition ?? "",
     specialApprovedBy: o.specialApprovedBy ?? "",
     clientCsn: o.clientCsn ?? "",
@@ -135,7 +139,7 @@ export function OdcForm({
           activationDate: "",
           paymentTermDays: 30,
           creditUsed: 0,
-          creditNf: "",
+          creditUses: [{ nf: "", amount: 0 }],
           specialCondition: "",
           specialApprovedBy: "",
           clientCsn: "",
@@ -168,7 +172,9 @@ export function OdcForm({
         discountPct: showDiscount ? form.discountPct : 0,
         clientType: clientType ?? "privado",
         hubgovCreditPct: clientType === "governo" && showHubgov ? form.hubgovCreditPct : 0,
-        creditUsed: showCreditUse ? form.creditUsed : 0,
+        creditUsed: showCreditUse
+          ? form.creditUses.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
+          : 0,
       }),
     [form, clientType, showDiscount, showHubgov, showCreditUse],
   );
@@ -224,8 +230,15 @@ export function OdcForm({
           licenseDelivery: form.licenseDelivery,
           activationDate: form.activationDate || null,
           paymentTermDays: form.paymentTermDays,
-          creditUsed: showCreditUse ? form.creditUsed : 0,
-          creditNf: showCreditUse ? form.creditNf : null,
+          creditUsed: showCreditUse
+            ? form.creditUses.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
+            : 0,
+          creditNf: showCreditUse
+            ? form.creditUses.map((line) => line.nf.trim()).filter(Boolean).join("; ") || null
+            : null,
+          creditUses: showCreditUse
+            ? form.creditUses.filter((line) => line.nf.trim() || line.amount > 0)
+            : [],
           specialCondition: showSpecial ? form.specialCondition : null,
           specialApprovedBy: showSpecial ? form.specialApprovedBy : null,
           signatureData: null,
@@ -510,46 +523,84 @@ export function OdcForm({
           ) : null}
 
           {showCreditUse ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Valor do Crédito Utilizado (R$)">
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  disabled={disabled}
-                  value={form.creditUsed || ""}
-                  onChange={(e) => patch({ creditUsed: Number(e.target.value) })}
-                />
-              </Field>
-              <Field label="NF que Gerou Este Crédito" hint="Obrigatório ao utilizar crédito.">
-                {credits.length ? (
-                  <Select
-                    disabled={disabled}
-                    value={form.creditNf}
-                    onChange={(e) => {
-                      const found = credits.find((c) => c.nf === e.target.value);
-                      patch({
-                        creditNf: e.target.value,
-                        creditUsed: found && !form.creditUsed ? found.remaining : form.creditUsed,
-                      });
-                    }}
-                  >
-                    <option value="">Selecionar NF com Saldo</option>
-                    {credits.map((c) => (
-                      <option key={c.nf} value={c.nf}>
-                        {c.nf} · saldo {brl(c.remaining)}
-                      </option>
-                    ))}
-                  </Select>
-                ) : (
-                  <Input
-                    disabled={disabled}
-                    value={form.creditNf}
-                    onChange={(e) => patch({ creditNf: e.target.value })}
-                    placeholder="Número da NF"
-                  />
-                )}
-              </Field>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Escolha uma ou mais notas e informe o valor de cada uma.
+              </p>
+              {form.creditUses.map((line, index) => (
+                <div key={index} className="grid gap-3 sm:grid-cols-[1fr_180px_auto]">
+                  <Field label={index === 0 ? "NF do crédito utilizado" : "NF"}>
+                    {credits.length ? (
+                      <Select
+                        disabled={disabled}
+                        value={line.nf}
+                        onChange={(e) => {
+                          const nf = e.target.value;
+                          const found = credits.find((c) => c.nf === nf);
+                          const creditUses = form.creditUses.map((row, i) =>
+                            i === index
+                              ? { nf, amount: found && !row.amount ? found.remaining : row.amount }
+                              : row,
+                          );
+                          patch({ creditUses });
+                        }}
+                      >
+                        <option value="">Selecionar NF com saldo</option>
+                        {credits.map((c) => (
+                          <option key={c.nf} value={c.nf}>
+                            {c.nf} · saldo {brl(c.remaining)}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <Input
+                        disabled={disabled}
+                        value={line.nf}
+                        placeholder="Número da NF"
+                        onChange={(e) => {
+                          const creditUses = form.creditUses.map((row, i) =>
+                            i === index ? { ...row, nf: e.target.value } : row,
+                          );
+                          patch({ creditUses });
+                        }}
+                      />
+                    )}
+                  </Field>
+                  <Field label={index === 0 ? "Valor utilizado (R$)" : "Valor (R$)"}>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      disabled={disabled}
+                      value={line.amount || ""}
+                      onChange={(e) => {
+                        const creditUses = form.creditUses.map((row, i) =>
+                          i === index ? { ...row, amount: Number(e.target.value) } : row,
+                        );
+                        patch({ creditUses });
+                      }}
+                    />
+                  </Field>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={disabled || form.creditUses.length === 1}
+                      onClick={() => patch({ creditUses: form.creditUses.filter((_, i) => i !== index) })}
+                    >
+                      Remover
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={disabled}
+                onClick={() => patch({ creditUses: [...form.creditUses, { nf: "", amount: 0 }] })}
+              >
+                Adicionar NF
+              </Button>
             </div>
           ) : null}
 
@@ -576,7 +627,7 @@ export function OdcForm({
             <p>Lista: {usd(calc.listTotalUsd)} → {brl(calc.listTotalBrl)}</p>
             <p>Desconto: − {brl(calc.discountAmount)}</p>
             {clientType === "governo" ? <p>Crédito HubGov gerado: {brl(calc.creditGenerated)}</p> : null}
-            <p>Crédito utilizado: {brl(showCreditUse ? form.creditUsed : 0)}</p>
+            <p>Crédito utilizado: {brl(showCreditUse ? form.creditUses.reduce((sum, line) => sum + (Number(line.amount) || 0), 0) : 0)}</p>
             <p className="mt-2 font-medium">Líquido: {brl(calc.netTotalBrl)}</p>
             {calc.belowMinimum ? (
               <p className="mt-1 text-destructive">

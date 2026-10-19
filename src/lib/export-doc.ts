@@ -13,6 +13,14 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&" + "quot;");
 }
 
+function creditUsesLabel(order: PurchaseOrder) {
+  const lines = order.creditUses?.filter((line) => line.nf || line.amount);
+  if (lines?.length) {
+    return ` (${lines.map((line) => `NF ${escapeHtml(line.nf)}: ${brl(line.amount)}`).join("; ")})`;
+  }
+  return order.creditNf ? ` (NF ${escapeHtml(order.creditNf)})` : "";
+}
+
 const FONT = "Arial, Helvetica, sans-serif";
 
 const docCss = `
@@ -138,7 +146,7 @@ export function odcDocumentHtml(order: PurchaseOrder, opts?: { includeStatus?: b
         <tbody>${items}</tbody>
       </table>
       <div class="box">
-        <p>Crédito utilizado${order.creditNf ? ` (NF ${escapeHtml(order.creditNf)})` : ""}: ${brl(order.creditUsed)}</p>
+        <p>Crédito utilizado${creditUsesLabel(order)}: ${brl(order.creditUsed)}</p>
         <p><strong>Valor Final: ${brl(order.netTotalBrl)}</strong></p>
       </div>
       <div class="box">

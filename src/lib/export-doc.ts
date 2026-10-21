@@ -176,7 +176,7 @@ export function odcDocumentHtml(order: PurchaseOrder, opts?: { includeStatus?: b
       </div>
       ${order.notes?.trim() ? `<div class="box"><p>${escapeHtml(order.notes.trim())}</p></div>` : ""}
       <div class="box">
-        <p>Entrega das Licenças: ${order.licenseDelivery === "imediato" ? "Imediato" : `Ativação em ${formatDateBR(order.activationDate)}`}</p>
+        <p>Entrega das Licenças: ${order.licenseDelivery === "imediato" ? "Imediata" : `Ativação em ${formatDateBR(order.activationDate)}`}</p>
         <p>Prazo de Pagamento: ${prazoDias(order.paymentTermDays)}</p>
         ${special}
       </div>

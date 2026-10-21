@@ -284,23 +284,20 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
             unit_show = unit_list
             line_show = line_list
         after_sum += line_show
-        line_vals.append((it, qty, pct, unit_show, line_show))
-    for it, qty, pct, unit_show, line_show in line_vals:
-        disc_cell = f"<td class='num'>{_fmt(pct)}%</td>" if has_disc else ""
+        line_vals.append((it, qty, unit_show, line_show))
+    for it, qty, unit_show, line_show in line_vals:
         rows.append(
             "<tr>"
             f"<td>{_esc(it.get('sku'))}</td>"
             f"<td class='pname'>{_esc(it.get('product_name'))}</td>"
             f"<td class='num'>{_qty(qty)}</td>"
             f"<td class='num'>{_money('R$', unit_show)}</td>"
-            f"{disc_cell}"
             f"<td class='num'>{_money('R$', line_show)}</td>"
             "</tr>"
         )
     body = "".join(rows)
     subtotal_show = after_sum if has_disc else list_brl
-    label_span = 4 if has_disc else 3
-    disc_head = '<th class="num">Desc. %</th>' if has_disc else ""
+    label_span = 3
     disc_row = "" if has_disc else (
         "<tr>"
         f'<td></td><td colspan="{label_span}" class="sum-lab">Desconto</td>'
@@ -338,7 +335,7 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
       <table class="itens">
         <thead><tr>
           <th>SKU</th><th>Produto</th><th class="num">Qtd</th>
-          <th class="num">Valor Unitário</th>{disc_head}<th class="num">Valor Total</th>
+          <th class="num">Valor Unitário</th><th class="num">Valor Total</th>
         </tr></thead>
         <tbody>
           {body}
@@ -360,7 +357,7 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
       {f'<div class="box"><p>{_esc((order.get("notes") or "").strip())}</p></div>' if (order.get("notes") or "").strip() else ""}
       <div class="box">
         {"" if order.get("client_type") != "governo" else f"<p>Crédito Pars gerado ({_fmt(order['hubgov_credit_pct'])}% sobre o valor após desconto): {_brl(order['credit_generated'])}</p>"}
-        <p>Entrega das Licenças: {"Imediato" if order.get("license_delivery") == "imediato" else "Ativação em " + _date(order.get("activation_date"))}</p>
+        <p>Entrega das Licenças: {"Imediata" if order.get("license_delivery") == "imediato" else "Ativação em " + _date(order.get("activation_date"))}</p>
         <p>Prazo de Pagamento: {_esc(_prazo_dias(order))}</p>
       </div>
       <h2>3. Cliente</h2>

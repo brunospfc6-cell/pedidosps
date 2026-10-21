@@ -478,7 +478,7 @@ function drawOdc(o, suppliers, products, credits) {
           <div class="field"><label>Dólar do Dia (R$)</label><input name="dollar_rate" type="number" step="0.0001" value="${o.dollar_rate || ""}"></div>
           <div class="field"><label>Condição de Pagamento</label><input name="payment_terms" placeholder="Ex.: 30 dias, à vista, 15/30/45" value="${esc(paymentTermsOf(o) || "30 dias")}"></div>
           <div class="field"><label>Entrega das Licenças</label><select name="license_delivery">
-            <option value="imediato">Imediato</option>
+            <option value="imediato">Imediata</option>
             <option value="agendada" ${o.license_delivery === "agendada" ? "selected" : ""}>Escolher Data de Ativação</option>
           </select></div>
           <div class="field" id="actWrap" style="${o.license_delivery === "agendada" ? "" : "display:none"}"><label>Data de Ativação</label><input name="activation_date" type="date" value="${esc(o.activation_date || "")}"></div>

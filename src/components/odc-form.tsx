@@ -457,7 +457,7 @@ export function OdcForm({
                 value={form.licenseDelivery}
                 onChange={(e) => patch({ licenseDelivery: e.target.value as LicenseDelivery })}
               >
-                <option value="imediato">Imediato</option>
+                <option value="imediato">Imediata</option>
                 <option value="agendada">Escolher Data de Ativação</option>
               </Select>
             </Field>

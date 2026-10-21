@@ -193,6 +193,9 @@ CSS = """
   .valor-compra .ext { margin: 0; }
   .doc-head { width: 100%; border-collapse: collapse; margin: 0 0 14pt; }
   .doc-head td { border: none; padding: 0 0 12pt 0; text-align: center; vertical-align: middle; }
+  table.itens { font-size: 10pt; line-height: 1.15; }
+  table.itens th, table.itens td { padding: 2.5pt 3pt; }
+  table.itens .pname { font-size: 9pt; line-height: 1.15; }
 """
 
 
@@ -263,19 +266,47 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
     credit = float(order.get("credit_used") or 0)
     net = float(order.get("net_total_brl") or 0)
     rows = []
+    order_pct = float(order.get("discount_pct") or 0)
+    line_vals = []
+    has_disc = False
+    after_sum = 0.0
     for it in items:
         qty = float(it.get("qty") or 0)
-        unit_brl = float(it.get("list_price_usd") or 0) * rate
-        total_brl = float(it.get("line_total_brl") or (qty * unit_brl))
+        raw = it.get("discount_pct")
+        pct = order_pct if raw is None or raw == "" else max(0.0, float(raw))
+        unit_list = float(it.get("list_price_usd") or 0) * rate
+        line_list = float(it.get("line_total_brl") or (qty * unit_list))
+        if pct > 0.0001:
+            has_disc = True
+            unit_show = unit_list * (1 - pct / 100)
+            line_show = line_list * (1 - pct / 100)
+        else:
+            unit_show = unit_list
+            line_show = line_list
+        after_sum += line_show
+        line_vals.append((it, qty, pct, unit_show, line_show))
+    for it, qty, pct, unit_show, line_show in line_vals:
+        disc_cell = f"<td class='num'>{_fmt(pct)}%</td>" if has_disc else ""
         rows.append(
             "<tr>"
-            f"<td>{_esc(it['sku'])}</td><td>{_esc(it['product_name'])}</td>"
+            f"<td>{_esc(it.get('sku'))}</td>"
+            f"<td class='pname'>{_esc(it.get('product_name'))}</td>"
             f"<td class='num'>{_qty(qty)}</td>"
-            f"<td class='num'>{_money('R$', unit_brl)}</td>"
-            f"<td class='num'>{_money('R$', total_brl)}</td>"
+            f"<td class='num'>{_money('R$', unit_show)}</td>"
+            f"{disc_cell}"
+            f"<td class='num'>{_money('R$', line_show)}</td>"
             "</tr>"
         )
     body = "".join(rows)
+    subtotal_show = after_sum if has_disc else list_brl
+    label_span = 4 if has_disc else 3
+    disc_head = '<th class="num">Desc. %</th>' if has_disc else ""
+    disc_row = "" if has_disc else (
+        "<tr>"
+        f'<td></td><td colspan="{label_span}" class="sum-lab">Desconto</td>'
+        f"<td class='num'>{_money('R$', -disc_amt)}</td>"
+        "</tr>"
+    )
     bits = [f"Data {_date(order['order_date'])}"]
     if include_status:
         bits.append(STATUS_LABEL.get(order["status"], order["status"]))
@@ -304,27 +335,24 @@ def odc_html(order: dict, items: list[dict], include_status: bool = False) -> st
         <p class="hero">{_brl(net)}</p>
         <p class="ext">{_esc(extenso)}</p>
       </div>
-      <table>
+      <table class="itens">
         <thead><tr>
-          <th>SKU</th><th>Produto</th><th class="num">Quantidade</th>
-          <th class="num">Valor Unitário</th><th class="num">Valor Total</th>
+          <th>SKU</th><th>Produto</th><th class="num">Qtd</th>
+          <th class="num">Valor Unitário</th>{disc_head}<th class="num">Valor Total</th>
         </tr></thead>
         <tbody>
           {body}
           <tr>
-            <td></td><td colspan="3" class="sum-lab">Subtotal</td>
-            <td class="num">{_money('R$', list_brl)}</td>
+            <td></td><td colspan="{label_span}" class="sum-lab">Subtotal</td>
+            <td class="num">{_money('R$', subtotal_show)}</td>
           </tr>
+          {disc_row}
           <tr>
-            <td></td><td colspan="3" class="sum-lab">Desconto</td>
-            <td class="num">{_money('R$', -disc_amt)}</td>
-          </tr>
-          <tr>
-            <td></td><td colspan="3" class="sum-lab">Crédito Pars usado{nf}</td>
+            <td></td><td colspan="{label_span}" class="sum-lab">Crédito Pars usado{nf}</td>
             <td class="num">{_money('R$', -credit)}</td>
           </tr>
           <tr>
-            <td></td><td colspan="3" class="sum-lab"><strong>Valor Total</strong></td>
+            <td></td><td colspan="{label_span}" class="sum-lab"><strong>Valor Total</strong></td>
             <td class="num"><strong>{_money('R$', net)}</strong></td>
           </tr>
         </tbody>
